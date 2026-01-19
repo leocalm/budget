@@ -35,7 +35,7 @@ pub async fn get_budget_category(pool: &State<Pool>, _current_user: CurrentUser,
     let client = get_client(pool).await?;
     let repo = PostgresRepository { client: &client };
     let uuid = Uuid::parse_str(id)?;
-    if let Some(bc) = repo.get_budget_category_by_id(&&uuid).await? {
+    if let Some(bc) = repo.get_budget_category_by_id(&uuid).await? {
         Ok(Json(BudgetCategoryResponse::from(&bc)))
     } else {
         Err(AppError::NotFound("Budget category not found".to_string()))

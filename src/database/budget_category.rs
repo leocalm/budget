@@ -25,7 +25,7 @@ impl<'a> BudgetCategoryRepository for PostgresRepository<'a> {
             VALUES ($1, $2)
             RETURNING id
             "#,
-                &[&request.category_id, &(request.budgeted_value as i32)],
+                &[&request.category_id, &{ request.budgeted_value }],
             )
             .await?;
 

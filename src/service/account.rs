@@ -3,7 +3,7 @@ use crate::database::transaction::TransactionRepository;
 use crate::error::app_error::AppError;
 use crate::models::account::AccountResponse;
 use crate::models::currency::CurrencyResponse;
-use crate::util::util::balance_on_date;
+use crate::service::service_util::balance_on_date;
 use chrono::Utc;
 
 pub struct AccountService<'a, R>
@@ -34,7 +34,7 @@ where
                 icon: a.icon.clone(),
                 account_type: a.account_type,
                 currency: CurrencyResponse::from(&a.currency),
-                balance: balance_on_date(Some(&Utc::now().date_naive()), &a, &transactions) as i64,
+                balance: balance_on_date(Some(&Utc::now().date_naive()), a, &transactions) as i64,
                 spend_limit: a.spend_limit,
             })
             .collect())

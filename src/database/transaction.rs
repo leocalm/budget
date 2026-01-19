@@ -315,8 +315,8 @@ impl<'a> TransactionRepository for PostgresRepository<'a> {
             )
             .await?;
 
-        if let Some(_) = rows.first() {
-            if let Some(updated_transaction) = self.get_transaction_by_id(&id).await? {
+        if !rows.is_empty() {
+            if let Some(updated_transaction) = self.get_transaction_by_id(id).await? {
                 Ok(updated_transaction)
             } else {
                 Err(AppError::NotFound("Transaction not found".to_string()))

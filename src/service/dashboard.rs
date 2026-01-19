@@ -8,7 +8,7 @@ use crate::models::budget_period::BudgetPeriod;
 use crate::models::category::CategoryType;
 use crate::models::dashboard::{BudgetPerDayResponse, DashboardResponse, MonthProgressResponse, MonthlyBurnInResponse, SpentPerCategoryResponse};
 use crate::models::transaction::{Transaction, TransactionResponse};
-use crate::util::util::{account_involved, add_transaction, balance_on_date};
+use crate::service::service_util::{account_involved, add_transaction, balance_on_date};
 use chrono::prelude::*;
 use deadpool_postgres::Client;
 use tracing::debug;
@@ -138,9 +138,9 @@ where
                     .fold(0, |acc, tx| acc + tx.amount);
                 SpentPerCategoryResponse {
                     category_name: budget_category.category.name,
-                    budgeted_value: budget_category.budgeted_value as i32,
+                    budgeted_value: budget_category.budgeted_value,
                     amount_spent,
-                    percentage_spent: amount_spent * 10000 / (budget_category.budgeted_value as i32),
+                    percentage_spent: amount_spent * 10000 / budget_category.budgeted_value,
                 }
             })
             .collect::<Vec<_>>();
@@ -152,7 +152,7 @@ where
 
     pub async fn monthly_burn_in(&mut self) -> Result<MonthlyBurnInResponse, AppError> {
         Ok(MonthlyBurnInResponse {
-            total_budget: self.get_budget_categories().await?.iter().fold(0, |acc, bc| acc + bc.budgeted_value as i32),
+            total_budget: self.get_budget_categories().await?.iter().fold(0, |acc, bc| acc + bc.budgeted_value),
             spent_budget: self
                 .get_transactions()
                 .await?

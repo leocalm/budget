@@ -24,7 +24,7 @@ impl<'a> BudgetRepository for PostgresRepository<'a> {
             VALUES ($1, $2)
             RETURNING id, name, start_day, created_at
             "#,
-                &[&request.name, &(request.start_day as i32)],
+                &[&request.name, &{ request.start_day }],
             )
             .await?;
 
@@ -94,7 +94,7 @@ impl<'a> BudgetRepository for PostgresRepository<'a> {
             WHERE id = $3
             RETURNING id, name, start_day, created_at
             "#,
-                &[&budget.name, &(budget.start_day as i32), &id],
+                &[&budget.name, &{ budget.start_day }, &id],
             )
             .await?;
 

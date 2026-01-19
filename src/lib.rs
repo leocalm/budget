@@ -5,7 +5,6 @@ mod error;
 mod models;
 mod routes;
 mod service;
-mod util;
 
 use crate::db::stage_db;
 use crate::routes as app_routes;
