@@ -6,6 +6,7 @@ use crate::models::category::Category;
 use crate::models::currency::Currency;
 use crate::models::transaction::{Transaction, TransactionRequest};
 use crate::models::vendor::Vendor;
+use std::str::FromStr;
 use tokio_postgres::Row;
 use uuid::Uuid;
 
@@ -23,6 +24,18 @@ pub trait TransactionRepository {
 #[async_trait::async_trait]
 impl<'a> TransactionRepository for PostgresRepository<'a> {
     async fn create_transaction(&self, transaction: &TransactionRequest) -> Result<Transaction, AppError> {
+        let to_account_id = if let Some(acc_id) = &transaction.to_account_id {
+            Some(Uuid::from_str(acc_id)?)
+        } else {
+            None
+        };
+
+        let vendor_id = if let Some(v_id) = &transaction.vendor_id {
+            Some(Uuid::from_str(v_id)?)
+        } else {
+            None
+        };
+
         let rows = self
             .client
             .query(
@@ -95,10 +108,10 @@ impl<'a> TransactionRepository for PostgresRepository<'a> {
                     &transaction.amount,
                     &transaction.description,
                     &transaction.occurred_at,
-                    &transaction.category_id,
-                    &transaction.from_account_id,
-                    &transaction.to_account_id,
-                    &transaction.vendor_id,
+                    &Uuid::from_str(&transaction.category_id)?,
+                    &Uuid::from_str(&transaction.category_id)?,
+                    &to_account_id,
+                    &vendor_id,
                 ],
             )
             .await?;

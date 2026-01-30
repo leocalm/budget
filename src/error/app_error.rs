@@ -3,6 +3,7 @@ use rocket::response::Responder;
 use rocket::{Request, Response};
 use std::io::Cursor;
 use tracing::error;
+use validator::ValidationErrors;
 
 #[derive(Debug)]
 pub enum AppError {
@@ -16,6 +17,7 @@ pub enum AppError {
     NotFound(String),
     CurrencyDoesNotExist(String),
     UuidError(String),
+    ValidationError(String),
 }
 
 impl std::fmt::Display for AppError {
@@ -31,6 +33,7 @@ impl std::fmt::Display for AppError {
             Self::NotFound(s) => write!(f, "Not found: {}", s),
             Self::CurrencyDoesNotExist(s) => write!(f, "Currency not found: {}", s),
             Self::UuidError(s) => write!(f, "Uuid error: {}", s),
+            Self::ValidationError(e) => write!(f, "Validation error: {}", e),
         }
     }
 }
@@ -51,12 +54,12 @@ impl From<password_hash::Error> for AppError {
 
 impl From<uuid::Error> for AppError {
     fn from(e: uuid::Error) -> Self {
-        AppError::UserAlreadyExists(e.to_string())
+        AppError::UuidError(e.to_string())
     }
 }
 
-impl From<AppError> for Status {
-    fn from(e: AppError) -> Self {
+impl From<&AppError> for Status {
+    fn from(e: &AppError) -> Self {
         match e {
             AppError::UserNotFound => Status::NotFound,
             AppError::InvalidCredentials => Status::Forbidden,
@@ -68,6 +71,7 @@ impl From<AppError> for Status {
             AppError::NotFound(_) => Status::NotFound,
             AppError::CurrencyDoesNotExist(_) => Status::BadRequest,
             AppError::UuidError(_) => Status::BadRequest,
+            AppError::ValidationError(_) => Status::BadRequest,
         }
     }
 }
@@ -76,12 +80,15 @@ impl<'r> Responder<'r, 'static> for AppError {
     fn respond_to(self, _req: &Request<'_>) -> rocket::response::Result<'static> {
         error!("{}", self);
 
-        let status = Status::from(self);
-        let body = status.to_string();
+        let status = Status::from(&self);
+        let body = self.to_string();
 
-        Response::build()
-            .status(status)
-            .sized_body(body.len(), Cursor::new(body))
-            .ok()
+        Response::build().status(status).sized_body(body.len(), Cursor::new(body)).ok()
+    }
+}
+
+impl From<ValidationErrors> for AppError {
+    fn from(e: ValidationErrors) -> Self {
+        AppError::ValidationError(e.to_string())
     }
 }

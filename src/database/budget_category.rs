@@ -2,6 +2,7 @@ use crate::database::postgres_repository::PostgresRepository;
 use crate::error::app_error::AppError;
 use crate::models::budget_category::{BudgetCategory, BudgetCategoryRequest};
 use crate::models::category::Category;
+use std::str::FromStr;
 use tokio_postgres::Row;
 use uuid::Uuid;
 
@@ -25,7 +26,7 @@ impl<'a> BudgetCategoryRepository for PostgresRepository<'a> {
             VALUES ($1, $2)
             RETURNING id
             "#,
-                &[&request.category_id, &{ request.budgeted_value }],
+                &[&Uuid::from_str(&request.category_id)?, &{ request.budgeted_value }],
             )
             .await?;
 

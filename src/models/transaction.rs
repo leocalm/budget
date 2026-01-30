@@ -1,9 +1,11 @@
 use crate::models::account::{Account, AccountResponse};
 use crate::models::category::{Category, CategoryResponse};
+use crate::models::validate_uuid_v4;
 use crate::models::vendor::{Vendor, VendorResponse};
 use chrono::NaiveDate;
 use rocket::serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use validator::Validate;
 
 #[derive(Serialize, Debug, Clone, Default)]
 pub struct Transaction {
@@ -17,15 +19,21 @@ pub struct Transaction {
     pub vendor: Option<Vendor>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Validate)]
 pub struct TransactionRequest {
+    #[validate(range(min = 0))]
     pub amount: i32,
+    #[validate(length(min = 3))]
     pub description: String,
     pub occurred_at: NaiveDate,
-    pub category_id: Uuid,
-    pub from_account_id: Uuid,
-    pub to_account_id: Option<Uuid>,
-    pub vendor_id: Option<Uuid>,
+    #[validate(length(equal = 36), custom(function = "validate_uuid_v4"))]
+    pub category_id: String,
+    #[validate(length(equal = 36), custom(function = "validate_uuid_v4"))]
+    pub from_account_id: String,
+    #[validate(length(equal = 36), custom(function = "validate_uuid_v4"))]
+    pub to_account_id: Option<String>,
+    #[validate(length(equal = 36), custom(function = "validate_uuid_v4"))]
+    pub vendor_id: Option<String>,
 }
 
 #[derive(Serialize, Debug)]
