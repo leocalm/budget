@@ -74,7 +74,7 @@ impl Config {
             // Layer on Budget.toml if it exists
             .merge(Toml::file("Budget.toml"))
             // Layer on environment variables (e.g., BUDGET_DATABASE_URL)
-            .merge(Env::prefixed("BUDGET_").split("_"))
+            .merge(Env::prefixed("BUDGET_").split("__"))
             .extract()?;
 
         Ok(figment)

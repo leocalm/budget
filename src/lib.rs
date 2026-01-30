@@ -30,7 +30,6 @@ fn init_tracing(log_level: &str, json_format: bool) {
 }
 
 pub fn build_rocket(config: Config) -> Rocket<Build> {
-    dotenvy::dotenv().ok();
     init_tracing(&config.logging.level, config.logging.json_format);
 
     rocket::build()
