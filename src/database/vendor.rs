@@ -101,7 +101,7 @@ impl<'a> VendorRepository for PostgresRepository<'a> {
             FROM vendor v
             LEFT JOIN transaction t ON v.id = t.vendor_id
             GROUP BY v.id, v.name, v.created_at
-            ORDER BY {} DESC NULLS LAST
+            ORDER BY {} ASC NULLS LAST
             "#,
             order_by_clause
         );
