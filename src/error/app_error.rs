@@ -12,13 +12,7 @@ pub enum AppError {
     Db {
         message: String,
         #[source]
-        source: Option<tokio_postgres::error::Error>,
-    },
-    #[error("Internal server error")]
-    Pool {
-        message: String,
-        #[source]
-        source: deadpool_postgres::PoolError,
+        source: sqlx::error::Error,
     },
     #[error("User not found")]
     UserNotFound,
@@ -53,24 +47,17 @@ pub enum AppError {
 }
 
 impl AppError {
-    pub fn db(message: impl Into<String>, source: tokio_postgres::error::Error) -> Self {
+    pub fn db(message: impl Into<String>, source: sqlx::error::Error) -> Self {
         Self::Db {
             message: message.into(),
-            source: Some(source),
+            source,
         }
     }
 
     pub fn db_message(message: impl Into<String>) -> Self {
         Self::Db {
             message: message.into(),
-            source: None,
-        }
-    }
-
-    pub fn pool(message: impl Into<String>, source: deadpool_postgres::PoolError) -> Self {
-        Self::Pool {
-            message: message.into(),
-            source,
+            source: sqlx::Error::RowNotFound, // placeholder error
         }
     }
 
@@ -85,12 +72,6 @@ impl AppError {
         Self::PasswordHash {
             message: format!("{}: {}", message.into(), source),
         }
-    }
-}
-
-impl From<tokio_postgres::error::Error> for AppError {
-    fn from(e: tokio_postgres::error::Error) -> Self {
-        AppError::db("Database operation failed", e)
     }
 }
 
@@ -113,7 +94,6 @@ impl From<&AppError> for Status {
             AppError::InvalidCredentials => Status::Forbidden,
             AppError::PasswordHash { .. } => Status::InternalServerError,
             AppError::Db { .. } => Status::InternalServerError,
-            AppError::Pool { .. } => Status::InternalServerError,
             AppError::Unauthorized => Status::Unauthorized,
             AppError::UserAlreadyExists(_) => Status::Conflict,
             AppError::BadRequest(_) => Status::BadRequest,
@@ -142,6 +122,15 @@ impl From<figment::Error> for AppError {
         AppError::ConfigurationError {
             message: "Failed to read configuration".to_string(),
             source: e,
+        }
+    }
+}
+
+impl From<sqlx::Error> for AppError {
+    fn from(e: sqlx::Error) -> Self {
+        match e {
+            sqlx::Error::RowNotFound => AppError::NotFound("Resource not found".to_string()),
+            _ => AppError::db("Database error", e),
         }
     }
 }
