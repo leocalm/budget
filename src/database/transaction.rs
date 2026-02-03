@@ -100,6 +100,7 @@ impl From<TransactionRow> for Transaction {
 
         Transaction {
             id: row.id,
+            user_id: Uuid::nil(),
             amount: row.amount,
             description: row.description,
             occurred_at: row.occurred_at,
