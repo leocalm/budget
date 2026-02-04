@@ -91,8 +91,8 @@ pub async fn get_vendors_with_status(
     ))
 }
 
-pub fn routes() -> Vec<rocket::Route> {
-    rocket_okapi::openapi_get_routes![create_vendor, list_all_vendors, get_vendor, delete_vendor, put_vendor, get_vendors_with_status]
+pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
+    rocket_okapi::openapi_get_routes_spec![create_vendor, list_all_vendors, get_vendor, delete_vendor, put_vendor, get_vendors_with_status]
 }
 
 #[cfg(test)]

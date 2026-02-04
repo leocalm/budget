@@ -80,8 +80,8 @@ pub async fn get_me(pool: &State<PgPool>, current_user: CurrentUser) -> Result<J
     }
 }
 
-pub fn routes() -> Vec<rocket::Route> {
-    rocket_okapi::openapi_get_routes![post_user, post_user_login, post_user_logout, put_user, delete_user_route, get_me]
+pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
+    rocket_okapi::openapi_get_routes_spec![post_user, post_user_login, post_user_logout, put_user, delete_user_route, get_me]
 }
 
 #[cfg(test)]

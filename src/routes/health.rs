@@ -17,8 +17,8 @@ pub async fn healthcheck(pool: &State<PgPool>) -> Result<Json<HealthResponse>, S
     }))
 }
 
-pub fn routes() -> Vec<rocket::Route> {
-    rocket_okapi::openapi_get_routes![healthcheck]
+pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
+    rocket_okapi::openapi_get_routes_spec![healthcheck]
 }
 
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq, JsonSchema)]

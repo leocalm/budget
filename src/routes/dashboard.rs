@@ -67,8 +67,8 @@ pub async fn get_dashboard(pool: &State<PgPool>, current_user: CurrentUser, peri
     Ok(Json(dashboard_service.dashboard_response(&current_user.id).await?))
 }
 
-pub fn routes() -> Vec<rocket::Route> {
-    rocket_okapi::openapi_get_routes![
+pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
+    rocket_okapi::openapi_get_routes_spec![
         get_balance_per_day,
         get_spent_per_category,
         get_monthly_burn_in,

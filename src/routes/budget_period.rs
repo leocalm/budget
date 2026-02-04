@@ -73,8 +73,8 @@ pub async fn delete_budget_period(pool: &State<PgPool>, current_user: CurrentUse
     Ok(Status::Ok)
 }
 
-pub fn routes() -> Vec<rocket::Route> {
-    rocket_okapi::openapi_get_routes![
+pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
+    rocket_okapi::openapi_get_routes_spec![
         create_budget_period,
         list_budget_periods,
         get_current_budget_period,

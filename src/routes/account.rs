@@ -76,8 +76,8 @@ pub async fn put_account(pool: &State<PgPool>, current_user: CurrentUser, id: &s
     Ok(Json(AccountResponse::from(&account)))
 }
 
-pub fn routes() -> Vec<rocket::Route> {
-    rocket_okapi::openapi_get_routes![create_account, list_all_accounts, get_account, delete_account, put_account]
+pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
+    rocket_okapi::openapi_get_routes_spec![create_account, list_all_accounts, get_account, delete_account, put_account]
 }
 
 #[cfg(test)]

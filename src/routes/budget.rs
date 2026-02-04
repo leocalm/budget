@@ -77,8 +77,8 @@ pub async fn delete_budget(pool: &State<PgPool>, current_user: CurrentUser, id: 
     Ok(Status::Ok)
 }
 
-pub fn routes() -> Vec<rocket::Route> {
-    rocket_okapi::openapi_get_routes![create_budget, list_all_budgets, get_budget, put_budget, delete_budget]
+pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
+    rocket_okapi::openapi_get_routes_spec![create_budget, list_all_budgets, get_budget, put_budget, delete_budget]
 }
 
 #[cfg(test)]
