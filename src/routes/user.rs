@@ -5,7 +5,7 @@ use crate::error::app_error::AppError;
 use crate::models::user::{LoginRequest, UserRequest, UserResponse};
 use rocket::http::{Cookie, CookieJar, Status};
 use rocket::serde::json::Json;
-use rocket::{routes, State};
+use rocket::{State, routes};
 use sqlx::PgPool;
 use uuid::Uuid;
 use validator::Validate;
@@ -106,12 +106,7 @@ mod tests {
             "password": "password123"
         });
 
-        let response = client
-            .post("/api/users/")
-            .header(ContentType::JSON)
-            .body(payload.to_string())
-            .dispatch()
-            .await;
+        let response = client.post("/api/users/").header(ContentType::JSON).body(payload.to_string()).dispatch().await;
 
         assert_eq!(response.status(), Status::Created);
 
@@ -121,9 +116,7 @@ mod tests {
         let user_email = user_json["email"].as_str().expect("user email");
 
         let cookie_value = format!("{}:{}", user_id, user_email);
-        client
-            .cookies()
-            .add_private(Cookie::build(("user", cookie_value)).path("/").build());
+        client.cookies().add_private(Cookie::build(("user", cookie_value)).path("/").build());
 
         let response = client.get("/api/users/me").dispatch().await;
 
