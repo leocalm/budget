@@ -98,3 +98,30 @@ impl Fairing for RequestLogger {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_request_id_creation() {
+        let request_id = RequestId::new();
+        assert!(!request_id.0.is_empty());
+        // Verify it's a valid UUID format
+        assert!(Uuid::parse_str(&request_id.0).is_ok());
+    }
+
+    #[test]
+    fn test_request_id_default() {
+        let request_id = RequestId::default();
+        assert!(!request_id.0.is_empty());
+        assert!(Uuid::parse_str(&request_id.0).is_ok());
+    }
+
+    #[test]
+    fn test_request_ids_are_unique() {
+        let id1 = RequestId::new();
+        let id2 = RequestId::new();
+        assert_ne!(id1.0, id2.0);
+    }
+}
