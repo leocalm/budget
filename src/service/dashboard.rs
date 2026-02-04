@@ -227,11 +227,7 @@ fn month_progress_for_period(budget_period: &BudgetPeriod) -> MonthProgressRespo
     let remaining_days = if current_date > period_end_date {
         0
     } else {
-        period_end_date
-            .signed_duration_since(current_date)
-            .num_days()
-            .try_into()
-            .unwrap_or(0)
+        period_end_date.signed_duration_since(current_date).num_days().try_into().unwrap_or(0)
     };
     let days_passed = days_in_period.saturating_sub(remaining_days);
     debug!("Days passed: {}", days_passed);

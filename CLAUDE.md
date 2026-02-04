@@ -160,3 +160,13 @@ Repository methods use `sqlx` with `PgPool` (no trait objects, no deadpool). Map
 - IDs are UUIDs from PostgreSQL `gen_random_uuid()`.
 - Amounts are stored as `BIGINT` (cents) in the database but exposed as `i64` in Rust.
 - Timestamps use `TIMESTAMPTZ` with `chrono::DateTime<Utc>`.
+
+## CI Discipline
+
+Always run the full PR check suite locally before pushing:
+- `cargo fmt --check`
+- `cargo clippy --no-deps -- -D warnings`
+- `cargo build --verbose`
+- `cargo test --verbose`
+
+This mirrors `.github/workflows/rust.yml` and keeps PR checks green.
