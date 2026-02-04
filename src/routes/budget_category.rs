@@ -76,8 +76,8 @@ pub async fn put_budget_category(pool: &State<PgPool>, current_user: CurrentUser
     Ok(Status::Ok)
 }
 
-pub fn routes() -> Vec<rocket::Route> {
-    rocket_okapi::openapi_get_routes![
+pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
+    rocket_okapi::openapi_get_routes_spec![
         create_budget_category,
         list_all_budget_categories,
         get_budget_category,

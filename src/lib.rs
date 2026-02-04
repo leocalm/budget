@@ -14,9 +14,9 @@ pub use config::Config;
 
 use crate::db::stage_db;
 use crate::routes as app_routes;
-use rocket::{Build, Rocket, catchers, http::Method};
+use rocket::{catchers, http::Method, Build, Rocket};
 use rocket_cors::{AllowedOrigins, CorsOptions};
-use rocket_okapi::swagger_ui::{SwaggerUIConfig, make_swagger_ui};
+use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
 use tracing_subscriber::EnvFilter;
 
 fn init_tracing(log_level: &str, json_format: bool) {
@@ -80,20 +80,28 @@ pub fn build_rocket(config: Config) -> Rocket<Build> {
 
     let cors = build_cors(&config.cors).to_cors().expect("Failed to create CORS fairing");
 
-    rocket::build()
+    let settings = rocket_okapi::settings::OpenApiSettings::default();
+
+    let mut rocket = rocket::build()
         .attach(cors)
-        .attach(stage_db(config.database))
-        .mount("/api/accounts", app_routes::account::routes())
-        .mount("/api/users", app_routes::user::routes())
-        .mount("/api/currency", app_routes::currency::routes())
-        .mount("/api/categories", app_routes::category::routes())
-        .mount("/api/budgets", app_routes::budget::routes())
-        .mount("/api/budget-categories", app_routes::budget_category::routes())
-        .mount("/api/transactions", app_routes::transaction::routes())
-        .mount("/api/vendors", app_routes::vendor::routes())
-        .mount("/api/health", app_routes::health::routes())
-        .mount("/api/dashboard", app_routes::dashboard::routes())
-        .mount("/api/budget_period", app_routes::budget_period::routes())
+        .attach(stage_db(config.database));
+
+    rocket_okapi::mount_endpoints_and_merged_docs! {
+        rocket, "/api".to_owned(), settings,
+        "/accounts" => app_routes::account::routes(),
+        "/users" => app_routes::user::routes(),
+        "/currency" => app_routes::currency::routes(),
+        "/categories" => app_routes::category::routes(),
+        "/budgets" => app_routes::budget::routes(),
+        "/budget-categories" => app_routes::budget_category::routes(),
+        "/transactions" => app_routes::transaction::routes(),
+        "/vendors" => app_routes::vendor::routes(),
+        "/health" => app_routes::health::routes(),
+        "/dashboard" => app_routes::dashboard::routes(),
+        "/budget_period" => app_routes::budget_period::routes(),
+    }
+
+    rocket
         .mount("/api/docs", make_swagger_ui(&get_swagger_config()))
         .register("/api", catchers![app_routes::error::not_found, app_routes::error::conflict])
 }

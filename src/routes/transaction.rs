@@ -99,8 +99,8 @@ pub async fn put_transaction(
     Ok(Json(TransactionResponse::from(&tx)))
 }
 
-pub fn routes() -> Vec<rocket::Route> {
-    rocket_okapi::openapi_get_routes![create_transaction, list_all_transactions, get_transaction, delete_transaction, put_transaction]
+pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
+    rocket_okapi::openapi_get_routes_spec![create_transaction, list_all_transactions, get_transaction, delete_transaction, put_transaction]
 }
 
 #[cfg(test)]

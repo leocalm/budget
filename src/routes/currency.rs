@@ -71,6 +71,6 @@ pub async fn put_currency(
     Ok(Json(CurrencyResponse::from(&currency)))
 }
 
-pub fn routes() -> Vec<rocket::Route> {
-    rocket_okapi::openapi_get_routes![create_currency, get_currency, get_currencies, delete_currency, put_currency]
+pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
+    rocket_okapi::openapi_get_routes_spec![create_currency, get_currency, get_currencies, delete_currency, put_currency]
 }
