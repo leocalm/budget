@@ -44,6 +44,7 @@ base_balances AS (
     FROM account a
     LEFT JOIN transaction t ON (t.from_account_id = a.id OR t.to_account_id = a.id)
                             AND t.occurred_at < (SELECT start_date FROM period)
+                            AND t.user_id = $2
     LEFT JOIN category c    ON t.category_id = c.id
     WHERE a.user_id = $2
     GROUP BY a.id, a.balance
@@ -51,7 +52,7 @@ base_balances AS (
 daily_totals AS (
     SELECT
         a.id AS account_id,
-        t.occurred_at,
+        t.occurred_at::date AS occurred_date,
         SUM(
             CASE
                 WHEN c.category_type = 'Incoming'                              THEN  t.amount
@@ -66,9 +67,10 @@ daily_totals AS (
     JOIN category   c   ON t.category_id = c.id
     CROSS JOIN period
     WHERE a.user_id = $2
+      AND t.user_id = $2
       AND t.occurred_at >= period.start_date
       AND t.occurred_at <= LEAST(period.end_date, CURRENT_DATE)
-    GROUP BY a.id, t.occurred_at
+    GROUP BY a.id, t.occurred_at::date
 )
 SELECT
     a.name                           AS account_name,
@@ -81,7 +83,7 @@ SELECT
 FROM account a
 JOIN  base_balances bb ON bb.id = a.id
 CROSS JOIN days d
-LEFT JOIN daily_totals dt ON dt.account_id = a.id AND dt.occurred_at = d.day
+LEFT JOIN daily_totals dt ON dt.account_id = a.id AND dt.occurred_date = d.day
 WHERE a.user_id = $2
 ORDER BY a.name, d.day
             "#,
@@ -128,6 +130,7 @@ FROM budget_category bc
 JOIN  category c                ON c.id  = bc.category_id
 LEFT JOIN period_transactions pt ON c.id = pt.category_id
 WHERE bc.user_id = $2
+  AND c.category_type = 'Outgoing'
 GROUP BY c.name, bc.budgeted_value
             "#,
         )
@@ -199,10 +202,10 @@ WHERE bp.id = $1 AND bp.user_id = $2
             r#"
 SELECT
     CURRENT_DATE                                                                                                          AS current_date,
-    (bp.end_date - bp.start_date)::int                                                                                    AS days_in_period,
+    GREATEST(1, (bp.end_date - bp.start_date)::int)                                                                        AS days_in_period,
     GREATEST(0, (bp.end_date - CURRENT_DATE)::int)                                                                        AS remaining_days,
     (LEAST((bp.end_date - bp.start_date)::int, GREATEST(0, (CURRENT_DATE - bp.start_date)::int)) * 100
-        / (bp.end_date - bp.start_date)::int)::int                                                                        AS days_passed_percentage
+        / GREATEST(1, (bp.end_date - bp.start_date)::int))::int                                                            AS days_passed_percentage
 FROM budget_period bp
 WHERE bp.id = $1 AND bp.user_id = $2
             "#,
