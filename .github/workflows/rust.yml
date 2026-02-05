@@ -33,9 +33,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: target
-          key: ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-target-debug-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-target-
+            ${{ runner.os }}-cargo-target-debug-
 
       - name: Cache sccache
         uses: actions/cache@v4
@@ -47,7 +47,7 @@ jobs:
             ${{ runner.os }}-sccache-
 
       - name: Setup Rust (minimal)
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
           profile: minimal
@@ -55,10 +55,12 @@ jobs:
 
       - name: Install sccache
         run: |
-          set -e
-          cargo install sccache --locked || true
-          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-          echo "SCCACHE_DIR=$HOME/.cache/sccache" >> $GITHUB_ENV
+          if cargo install sccache --locked; then
+            echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+            echo "SCCACHE_DIR=$HOME/.cache/sccache" >> $GITHUB_ENV
+          else
+            echo "sccache install failed; continuing without it" >&2
+          fi
 
       - name: Check formatting
         run: cargo fmt -- --check
@@ -67,13 +69,9 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Fast compile check (PR)
-        env:
-          RUSTC_WRAPPER: sccache
         run: cargo check --workspace --all-targets --tests
 
       - name: Run quick unit tests (lib-only)
-        env:
-          RUSTC_WRAPPER: sccache
         run: cargo test --lib --workspace
 
       - name: Show sccache stats
@@ -95,13 +93,13 @@ jobs:
             ~/.cargo/git
             target
             ~/.cache/sccache
-          key: ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-target-release-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-target-
+            ${{ runner.os }}-cargo-target-release-
             ${{ runner.os }}-cargo-registry-
 
       - name: Setup Rust (minimal)
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
           profile: minimal
@@ -109,10 +107,12 @@ jobs:
 
       - name: Install sccache
         run: |
-          set -e
-          cargo install sccache --locked || true
-          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-          echo "SCCACHE_DIR=$HOME/.cache/sccache" >> $GITHUB_ENV
+          if cargo install sccache --locked; then
+            echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+            echo "SCCACHE_DIR=$HOME/.cache/sccache" >> $GITHUB_ENV
+          else
+            echo "sccache install failed; continuing without it" >&2
+          fi
 
       - name: Format
         run: cargo fmt --check
@@ -121,13 +121,9 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Build (release)
-        env:
-          RUSTC_WRAPPER: sccache
         run: cargo build --workspace --release --all-targets --verbose
 
       - name: Run tests (release)
-        env:
-          RUSTC_WRAPPER: sccache
         run: cargo test --workspace --all-targets --release --verbose
 
       - name: Show sccache stats

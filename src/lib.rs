@@ -15,11 +15,12 @@ pub use config::Config;
 
 use crate::db::stage_db;
 use crate::middleware::RequestLogger;
-use crate::middleware::rate_limit::{RateLimitConfig, RateLimiter};
+use crate::middleware::rate_limit::RateLimiter;
 use crate::routes as app_routes;
 use rocket::{Build, Rocket, catchers, http::Method};
 use rocket_cors::{AllowedOrigins, CorsOptions};
 use rocket_okapi::swagger_ui::{SwaggerUIConfig, make_swagger_ui};
+use std::sync::Arc;
 use tracing_subscriber::EnvFilter;
 
 fn init_tracing(log_level: &str, json_format: bool) {
@@ -92,7 +93,8 @@ pub fn build_rocket(config: Config) -> Rocket<Build> {
 
     let settings = rocket_okapi::settings::OpenApiSettings::default();
 
-    let rate_limiter = RateLimiter::new(RateLimitConfig::default());
+    let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit.clone()));
+    rate_limiter.clone().spawn_cleanup_task();
 
     let mut rocket = rocket::build()
         .manage(rate_limiter)
@@ -115,9 +117,10 @@ pub fn build_rocket(config: Config) -> Rocket<Build> {
         "/budget_period" => app_routes::budget_period::routes(),
     }
 
-    rocket
-        .mount("/api/docs", make_swagger_ui(&get_swagger_config()))
-        .register("/api", catchers![app_routes::error::not_found, app_routes::error::conflict])
+    rocket.mount("/api/docs", make_swagger_ui(&get_swagger_config())).register(
+        "/api",
+        catchers![app_routes::error::not_found, app_routes::error::conflict, app_routes::error::too_many_requests],
+    )
 }
 
 // TODO: allowance accounts

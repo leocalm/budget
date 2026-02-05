@@ -1,7 +1,7 @@
 use crate::auth::CurrentUser;
 use crate::database::postgres_repository::PostgresRepository;
 use crate::error::app_error::AppError;
-use crate::middleware::rate_limit::RateLimit;
+use crate::middleware::rate_limit::{AuthRateLimit, RateLimit};
 use crate::models::user::{LoginRequest, UserRequest, UserResponse};
 use rocket::http::{Cookie, CookieJar, Status};
 use rocket::serde::json::Json;
@@ -14,7 +14,7 @@ use validator::Validate;
 /// Create a new user (sign up)
 #[openapi(tag = "Users")]
 #[post("/", data = "<payload>")]
-pub async fn post_user(pool: &State<PgPool>, _rate_limit: RateLimit, payload: Json<UserRequest>) -> Result<(Status, Json<UserResponse>), AppError> {
+pub async fn post_user(pool: &State<PgPool>, _rate_limit: AuthRateLimit, payload: Json<UserRequest>) -> Result<(Status, Json<UserResponse>), AppError> {
     payload.validate()?;
 
     let repo = PostgresRepository { pool: pool.inner().clone() };
@@ -56,7 +56,12 @@ pub async fn delete_user_route(pool: &State<PgPool>, _rate_limit: RateLimit, _cu
 /// Log in a user and set authentication cookie
 #[openapi(tag = "Users")]
 #[post("/login", data = "<payload>")]
-pub async fn post_user_login(pool: &State<PgPool>, _rate_limit: RateLimit, cookies: &CookieJar<'_>, payload: Json<LoginRequest>) -> Result<Status, AppError> {
+pub async fn post_user_login(
+    pool: &State<PgPool>,
+    _rate_limit: AuthRateLimit,
+    cookies: &CookieJar<'_>,
+    payload: Json<LoginRequest>,
+) -> Result<Status, AppError> {
     let repo = PostgresRepository { pool: pool.inner().clone() };
     if let Some(user) = repo.get_user_by_email(&payload.email).await? {
         repo.verify_password(&user, &payload.password).await?;
@@ -70,7 +75,7 @@ pub async fn post_user_login(pool: &State<PgPool>, _rate_limit: RateLimit, cooki
 /// Log out the current user
 #[openapi(tag = "Users")]
 #[post("/logout")]
-pub fn post_user_logout(_rate_limit: RateLimit, cookies: &CookieJar<'_>) -> Status {
+pub async fn post_user_logout(_rate_limit: RateLimit, cookies: &CookieJar<'_>) -> Status {
     cookies.remove_private(Cookie::build("user").build());
     Status::Ok
 }
