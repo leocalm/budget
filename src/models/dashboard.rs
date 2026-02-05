@@ -35,5 +35,5 @@ pub struct MonthProgressResponse {
 
 #[derive(Serialize, Debug, JsonSchema)]
 pub struct TotalAssetsResponse {
-    pub total_assets: i32,
+    pub total_assets: i64,
 }

@@ -226,32 +226,43 @@ WHERE bp.id = $1 AND bp.user_id = $2
     pub async fn get_total_assets(&self, user_id: &Uuid) -> Result<TotalAssetsResponse, AppError> {
         #[derive(sqlx::FromRow)]
         struct TotalAssetsRow {
-            total_assets: i32,
+            total_assets: i64,
         }
 
         let row = sqlx::query_as::<_, TotalAssetsRow>(
             r#"
 WITH account_initial_balances AS (
     SELECT
-        SUM(balance) as balance_total
+        COALESCE(SUM(balance), 0) as balance_total
     FROM account
-    WHERE user_id = $1
+    WHERE user_id = $1 AND account_type <> 'Allowance'
 )
 SELECT
-    (SUM(
-            CASE
-                WHEN c.category_type = 'Incoming'                              THEN  t.amount
-                WHEN c.category_type = 'Outgoing'                              THEN -t.amount
-                WHEN c.category_type = 'Transfer' AND t.from_account_id = a.id THEN -t.amount
-                WHEN c.category_type = 'Transfer' AND t.to_account_id   = a.id THEN  t.amount
-                ELSE 0
-                END
-    ) + aib.balance_total)::int as total_assets
-FROM transaction t
-JOIN account a ON a.id = t.from_account_id OR a.id = t.to_account_id
-JOIN category c ON c.id = t.category_id
-CROSS JOIN account_initial_balances aib
-WHERE t.user_id = $1 AND a.account_type <> 'Allowance'
+    COALESCE(
+        (
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN t.id IS NULL                                           THEN 0
+                        WHEN c.category_type = 'Incoming'                            THEN  t.amount
+                        WHEN c.category_type = 'Outgoing'                            THEN -t.amount
+                        WHEN c.category_type = 'Transfer' AND t.from_account_id = a.id THEN -t.amount
+                        WHEN c.category_type = 'Transfer' AND t.to_account_id   = a.id THEN  t.amount
+                        ELSE 0
+                    END
+                ),
+                0
+            ) + COALESCE(aib.balance_total, 0)
+        ),
+        0
+    )::bigint as total_assets
+FROM account_initial_balances aib
+LEFT JOIN account a
+    ON a.user_id = $1 AND a.account_type <> 'Allowance'
+LEFT JOIN transaction t
+    ON (a.id = t.from_account_id OR a.id = t.to_account_id)
+    AND t.user_id = $1
+LEFT JOIN category c ON c.id = t.category_id
 GROUP BY aib.balance_total
 "#,
         )
