@@ -1,3 +1,4 @@
+use crate::middleware::rate_limit::RateLimit;
 use rocket::serde::json::Json;
 use rocket::serde::{Deserialize, Serialize};
 use rocket::{State, get, http::Status};
@@ -8,7 +9,7 @@ use sqlx::PgPool;
 /// Check API and database health
 #[openapi(tag = "Health")]
 #[get("/")]
-pub async fn healthcheck(pool: &State<PgPool>) -> Result<Json<HealthResponse>, Status> {
+pub async fn healthcheck(pool: &State<PgPool>, _rate_limit: RateLimit) -> Result<Json<HealthResponse>, Status> {
     sqlx::query("SELECT 1").execute(pool.inner()).await.map_err(|_| Status::ServiceUnavailable)?;
 
     Ok(Json(HealthResponse {

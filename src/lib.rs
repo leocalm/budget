@@ -15,6 +15,7 @@ pub use config::Config;
 
 use crate::db::stage_db;
 use crate::middleware::RequestLogger;
+use crate::middleware::rate_limit::{RateLimitConfig, RateLimiter};
 use crate::routes as app_routes;
 use rocket::{Build, Rocket, catchers, http::Method};
 use rocket_cors::{AllowedOrigins, CorsOptions};
@@ -91,7 +92,10 @@ pub fn build_rocket(config: Config) -> Rocket<Build> {
 
     let settings = rocket_okapi::settings::OpenApiSettings::default();
 
+    let rate_limiter = RateLimiter::new(RateLimitConfig::default());
+
     let mut rocket = rocket::build()
+        .manage(rate_limiter)
         .attach(cors)
         .attach(RequestLogger) // Attach request/response logging middleware
         .attach(stage_db(config.database));
