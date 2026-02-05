@@ -49,12 +49,7 @@ pub async fn list_all_categories(
 /// Get a category by ID
 #[openapi(tag = "Categories")]
 #[get("/<id>")]
-pub async fn get_category(
-    pool: &State<PgPool>,
-    _rate_limit: RateLimit,
-    current_user: CurrentUser,
-    id: &str,
-) -> Result<Json<CategoryResponse>, AppError> {
+pub async fn get_category(pool: &State<PgPool>, _rate_limit: RateLimit, current_user: CurrentUser, id: &str) -> Result<Json<CategoryResponse>, AppError> {
     let repo = PostgresRepository { pool: pool.inner().clone() };
     let uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid category id", e))?;
     if let Some(category) = repo.get_category_by_id(&uuid, &current_user.id).await? {
@@ -67,12 +62,7 @@ pub async fn get_category(
 /// Delete a category by ID
 #[openapi(tag = "Categories")]
 #[delete("/<id>")]
-pub async fn delete_category(
-    pool: &State<PgPool>,
-    _rate_limit: RateLimit,
-    current_user: CurrentUser,
-    id: &str,
-) -> Result<Status, AppError> {
+pub async fn delete_category(pool: &State<PgPool>, _rate_limit: RateLimit, current_user: CurrentUser, id: &str) -> Result<Status, AppError> {
     let repo = PostgresRepository { pool: pool.inner().clone() };
     let uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid category id", e))?;
     repo.delete_category(&uuid, &current_user.id).await?;

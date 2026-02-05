@@ -30,12 +30,7 @@ pub async fn create_currency(
 /// Get a currency by its code (e.g., USD, EUR)
 #[openapi(tag = "Currencies")]
 #[get("/<code>")]
-pub async fn get_currency(
-    pool: &State<PgPool>,
-    _rate_limit: RateLimit,
-    _current_user: CurrentUser,
-    code: &str,
-) -> Result<Json<CurrencyResponse>, AppError> {
+pub async fn get_currency(pool: &State<PgPool>, _rate_limit: RateLimit, _current_user: CurrentUser, code: &str) -> Result<Json<CurrencyResponse>, AppError> {
     let repo = PostgresRepository { pool: pool.inner().clone() };
     if let Some(currency) = repo.get_currency_by_code(code).await? {
         Ok(Json(CurrencyResponse::from(&currency)))
@@ -61,12 +56,7 @@ pub async fn get_currencies(
 /// Delete a currency by ID
 #[openapi(tag = "Currencies")]
 #[delete("/<id>")]
-pub async fn delete_currency(
-    pool: &State<PgPool>,
-    _rate_limit: RateLimit,
-    _current_user: CurrentUser,
-    id: &str,
-) -> Result<Status, AppError> {
+pub async fn delete_currency(pool: &State<PgPool>, _rate_limit: RateLimit, _current_user: CurrentUser, id: &str) -> Result<Status, AppError> {
     let repo = PostgresRepository { pool: pool.inner().clone() };
     let uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid currency id", e))?;
     repo.delete_currency(&uuid).await?;

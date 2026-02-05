@@ -88,10 +88,7 @@ impl RateLimiter {
                 identity: identity.clone(),
                 bucket,
             };
-            let counter = counters.entry(key).or_insert_with(|| Counter {
-                window_start: now,
-                count: 0,
-            });
+            let counter = counters.entry(key).or_insert_with(|| Counter { window_start: now, count: 0 });
 
             if now.duration_since(counter.window_start) >= self.config.window {
                 counter.window_start = now;
@@ -139,9 +136,7 @@ pub(crate) struct RateLimitError {
 impl RateLimitError {
     fn new(retry_after: Duration) -> Self {
         let seconds = retry_after.as_secs().max(1);
-        Self {
-            retry_after_secs: seconds,
-        }
+        Self { retry_after_secs: seconds }
     }
 }
 
@@ -167,10 +162,7 @@ impl<'r> FromRequest<'r> for RateLimit {
         };
 
         let bucket = RateLimitBucket::from_method(request.method());
-        let ip = request
-            .client_ip()
-            .map(|addr| addr.to_string())
-            .unwrap_or_else(|| "unknown".to_string());
+        let ip = request.client_ip().map(|addr| addr.to_string()).unwrap_or_else(|| "unknown".to_string());
 
         let mut identities = vec![RateLimitIdentity::Ip(ip.clone())];
         if let Some(user_id) = extract_user_id(request) {
@@ -194,11 +186,7 @@ impl<'r> FromRequest<'r> for RateLimit {
 }
 
 impl<'a> OpenApiFromRequest<'a> for RateLimit {
-    fn from_request_input(
-        _gen: &mut OpenApiGenerator,
-        _name: String,
-        _required: bool,
-    ) -> rocket_okapi::Result<RequestHeaderInput> {
+    fn from_request_input(_gen: &mut OpenApiGenerator, _name: String, _required: bool) -> rocket_okapi::Result<RequestHeaderInput> {
         Ok(RequestHeaderInput::None)
     }
 
@@ -236,14 +224,8 @@ mod tests {
 
         let identities = vec![RateLimitIdentity::Ip("127.0.0.1".to_string())];
 
-        assert!(matches!(
-            limiter.check(&identities, RateLimitBucket::Read).await,
-            RateLimitDecision::Allow
-        ));
-        assert!(matches!(
-            limiter.check(&identities, RateLimitBucket::Read).await,
-            RateLimitDecision::Allow
-        ));
+        assert!(matches!(limiter.check(&identities, RateLimitBucket::Read).await, RateLimitDecision::Allow));
+        assert!(matches!(limiter.check(&identities, RateLimitBucket::Read).await, RateLimitDecision::Allow));
         assert!(matches!(
             limiter.check(&identities, RateLimitBucket::Read).await,
             RateLimitDecision::Limited { .. }

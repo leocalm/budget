@@ -50,12 +50,7 @@ pub async fn list_all_vendors(
 /// Get a vendor by ID
 #[openapi(tag = "Vendors")]
 #[get("/<id>")]
-pub async fn get_vendor(
-    pool: &State<PgPool>,
-    _rate_limit: RateLimit,
-    current_user: CurrentUser,
-    id: &str,
-) -> Result<Json<VendorResponse>, AppError> {
+pub async fn get_vendor(pool: &State<PgPool>, _rate_limit: RateLimit, current_user: CurrentUser, id: &str) -> Result<Json<VendorResponse>, AppError> {
     let repo = PostgresRepository { pool: pool.inner().clone() };
     let uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid vendor id", e))?;
     if let Some(vendor) = repo.get_vendor_by_id(&uuid, &current_user.id).await? {
@@ -68,12 +63,7 @@ pub async fn get_vendor(
 /// Delete a vendor by ID
 #[openapi(tag = "Vendors")]
 #[delete("/<id>")]
-pub async fn delete_vendor(
-    pool: &State<PgPool>,
-    _rate_limit: RateLimit,
-    current_user: CurrentUser,
-    id: &str,
-) -> Result<Status, AppError> {
+pub async fn delete_vendor(pool: &State<PgPool>, _rate_limit: RateLimit, current_user: CurrentUser, id: &str) -> Result<Status, AppError> {
     let repo = PostgresRepository { pool: pool.inner().clone() };
     let uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid vendor id", e))?;
     repo.delete_vendor(&uuid, &current_user.id).await?;

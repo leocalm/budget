@@ -78,12 +78,7 @@ pub async fn put_budget_period(
 /// Delete a budget period by ID
 #[openapi(tag = "Budget Periods")]
 #[delete("/<id>")]
-pub async fn delete_budget_period(
-    pool: &State<PgPool>,
-    _rate_limit: RateLimit,
-    current_user: CurrentUser,
-    id: &str,
-) -> Result<Status, AppError> {
+pub async fn delete_budget_period(pool: &State<PgPool>, _rate_limit: RateLimit, current_user: CurrentUser, id: &str) -> Result<Status, AppError> {
     let repo = PostgresRepository { pool: pool.inner().clone() };
     let uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid budget period id", e))?;
     repo.delete_budget_period(&uuid, &current_user.id).await?;

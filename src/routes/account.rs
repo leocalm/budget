@@ -49,12 +49,7 @@ pub async fn list_all_accounts(
 /// Get an account by ID
 #[openapi(tag = "Accounts")]
 #[get("/<id>")]
-pub async fn get_account(
-    pool: &State<PgPool>,
-    _rate_limit: RateLimit,
-    current_user: CurrentUser,
-    id: &str,
-) -> Result<Json<AccountResponse>, AppError> {
+pub async fn get_account(pool: &State<PgPool>, _rate_limit: RateLimit, current_user: CurrentUser, id: &str) -> Result<Json<AccountResponse>, AppError> {
     let repo = PostgresRepository { pool: pool.inner().clone() };
     let uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid account id", e))?;
     if let Some(account) = repo.get_account_by_id(&uuid, &current_user.id).await? {
@@ -67,12 +62,7 @@ pub async fn get_account(
 /// Delete an account by ID
 #[openapi(tag = "Accounts")]
 #[delete("/<id>")]
-pub async fn delete_account(
-    pool: &State<PgPool>,
-    _rate_limit: RateLimit,
-    current_user: CurrentUser,
-    id: &str,
-) -> Result<Status, AppError> {
+pub async fn delete_account(pool: &State<PgPool>, _rate_limit: RateLimit, current_user: CurrentUser, id: &str) -> Result<Status, AppError> {
     let repo = PostgresRepository { pool: pool.inner().clone() };
     let uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid account id", e))?;
     repo.delete_account(&uuid, &current_user.id).await?;

@@ -58,12 +58,7 @@ pub async fn list_all_transactions(
 /// Get a transaction by ID
 #[openapi(tag = "Transactions")]
 #[get("/<id>")]
-pub async fn get_transaction(
-    pool: &State<PgPool>,
-    _rate_limit: RateLimit,
-    current_user: CurrentUser,
-    id: &str,
-) -> Result<Json<TransactionResponse>, AppError> {
+pub async fn get_transaction(pool: &State<PgPool>, _rate_limit: RateLimit, current_user: CurrentUser, id: &str) -> Result<Json<TransactionResponse>, AppError> {
     let repo = PostgresRepository { pool: pool.inner().clone() };
     let uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid transaction id", e))?;
     if let Some(tx) = repo.get_transaction_by_id(&uuid, &current_user.id).await? {
@@ -76,12 +71,7 @@ pub async fn get_transaction(
 /// Delete a transaction by ID
 #[openapi(tag = "Transactions")]
 #[delete("/<id>")]
-pub async fn delete_transaction(
-    pool: &State<PgPool>,
-    _rate_limit: RateLimit,
-    current_user: CurrentUser,
-    id: &str,
-) -> Result<Status, AppError> {
+pub async fn delete_transaction(pool: &State<PgPool>, _rate_limit: RateLimit, current_user: CurrentUser, id: &str) -> Result<Status, AppError> {
     let repo = PostgresRepository { pool: pool.inner().clone() };
     let uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid transaction id", e))?;
     repo.delete_transaction(&uuid, &current_user.id).await?;

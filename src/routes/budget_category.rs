@@ -67,12 +67,7 @@ pub async fn get_budget_category(
 /// Delete a budget category by ID
 #[openapi(tag = "Budget Categories")]
 #[delete("/<id>")]
-pub async fn delete_budget_category(
-    pool: &State<PgPool>,
-    _rate_limit: RateLimit,
-    current_user: CurrentUser,
-    id: &str,
-) -> Result<Status, AppError> {
+pub async fn delete_budget_category(pool: &State<PgPool>, _rate_limit: RateLimit, current_user: CurrentUser, id: &str) -> Result<Status, AppError> {
     let repo = PostgresRepository { pool: pool.inner().clone() };
     let uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid budget category id", e))?;
     repo.delete_budget_category(&uuid, &current_user.id).await?;
