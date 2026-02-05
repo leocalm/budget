@@ -31,9 +31,18 @@ The server will start (by default) on `http://127.0.0.1:8000`.
 
 ### Endpoints
 
-- `GET /api/health` – simple health check.
-- `POST /api/budgets` – create a budget.
-- `GET /api/budgets` – list budgets.
+All API endpoints are versioned and mounted under `/api/v1`. The current version is `v1`.
+
+- `GET /api/v1/health` – simple health check.
+- `POST /api/v1/budgets` – create a budget.
+- `GET /api/v1/budgets` – list budgets.
+
+#### API Documentation
+
+- Swagger/OpenAPI documentation is available at `/api/v1/docs`
+- OpenAPI spec is available at `/api/v1/openapi.json`
+
+For complete API lifecycle information including deprecation policies and migration guides, see [API_LIFECYCLE.md](API_LIFECYCLE.md).
 
 ## Database schema & migrations
 

@@ -167,7 +167,7 @@ mod tests {
             "decimal_places": 2
         });
 
-        let _currency = client
+        let response = client
             .post("/api/v1/currency/")
             .header(ContentType::JSON)
             .body(payload.to_string())
@@ -213,7 +213,7 @@ mod tests {
             "spend_limit": null
         });
 
-        let _account_response = client
+        let response = client
             .post("/api/v1/accounts/")
             .header(ContentType::JSON)
             .body(account_payload.to_string())
