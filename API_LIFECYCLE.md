@@ -8,7 +8,7 @@ The Budget API uses URL-based versioning to ensure backward compatibility and al
 
 **Current Stable Version:** `v1`
 
-Base URL: `/api/v1`
+Base URL (default): `/api/v1`
 
 ## Versioning Strategy
 
@@ -133,9 +133,19 @@ API version announcements and deprecation notices will be communicated through:
 For questions about API versioning, deprecations, or migrations:
 
 1. Check the migration guide for your version
-2. Review the OpenAPI documentation at `/api/v1/docs`
+2. Review the OpenAPI documentation at `/api/v1/docs` (default)
 3. Open an issue in the GitHub repository
 4. Consult the AGENTS.md file for technical implementation details
+
+Note: Swagger/OpenAPI docs are exposed for each configured base path (e.g., `/api/v2/docs` when `/api/v2` is enabled).
+
+Example configuration:
+
+```toml
+[api]
+base_path = "/api/v1"
+additional_base_paths = ["/api/v2"]
+```
 
 ## Version History
 

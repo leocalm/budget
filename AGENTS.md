@@ -61,6 +61,8 @@ Key sections and their defaults:
 | | `window_seconds` | 60 |
 | | `cleanup_interval_seconds` | 60 |
 | | `require_client_ip` | `true` |
+| `[api]` | `base_path` | `/api/v1` |
+| | `additional_base_paths` | `[]` |
 
 > Wildcard origins (`*`) combined with `allow_credentials = true` is an invalid combination and will panic at startup.
 
@@ -124,7 +126,7 @@ Models are split into two types in `src/models/<entity>.rs`:
 
 ### API Endpoints Structure
 
-All endpoints are mounted under `/api/v1`. List endpoints use cursor-based pagination (see Pagination below).
+All endpoints are mounted under `/api/v1` by default (configurable via `api.base_path`). The same routes can be exposed under additional base paths via `api.additional_base_paths`. The examples below assume the default base path. List endpoints use cursor-based pagination (see Pagination below).
 
 - `/api/v1/health` — `GET /` runs `SELECT 1` against the pool; returns `{"status":"ok","database":"connected"}` or `503`
 - `/api/v1/users` — create, login, logout, update, delete, `GET /me`
@@ -139,7 +141,7 @@ All endpoints are mounted under `/api/v1`. List endpoints use cursor-based pagin
 - `/api/v1/dashboard` — `budget-per-day`, `spent-per-category`, `monthly-burn-in`, `month-progress`, `recent-transactions`, `dashboard` (all accept `period_id`)
   `spent-per-category` returns `percentage_spent` in basis points (percent * 100). Example: 2534 = 25.34%.
 
-404 and 409 responses are caught under `/api/v1` and returned as `{"message":"..."}` JSON.
+404 and 409 responses are caught under `/api/v1` by default and returned as `{"message":"..."}` JSON.
 
 ### Pagination
 
