@@ -4,7 +4,7 @@ use crate::database::vendor::VendorOrderBy;
 use crate::error::app_error::AppError;
 use crate::middleware::rate_limit::RateLimit;
 use crate::models::pagination::{CursorPaginatedResponse, CursorParams};
-use crate::models::vendor::{VendorRequest, VendorResponse, VendorWithStatsResponse};
+use crate::models::vendor::{VendorRequest, VendorResponse, VendorWithPeriodStatsResponse, VendorWithStatsResponse};
 use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::{State, delete, get, post, put};
@@ -29,7 +29,7 @@ pub async fn create_vendor(
     Ok((Status::Created, Json(VendorResponse::from(&vendor))))
 }
 
-/// List all vendors with cursor-based pagination
+/// List all vendors with cursor-based pagination and stats for the current budget period
 #[openapi(tag = "Vendors")]
 #[get("/?<cursor>&<limit>")]
 pub async fn list_all_vendors(
@@ -38,13 +38,14 @@ pub async fn list_all_vendors(
     current_user: CurrentUser,
     cursor: Option<String>,
     limit: Option<i64>,
-) -> Result<Json<CursorPaginatedResponse<VendorResponse>>, AppError> {
+) -> Result<Json<CursorPaginatedResponse<VendorWithPeriodStatsResponse>>, AppError> {
     let repo = PostgresRepository { pool: pool.inner().clone() };
     let params = CursorParams::from_query(cursor, limit)?;
+    let period = repo.get_current_budget_period(&current_user.id).await?;
 
-    let vendors = repo.list_vendors(&params, &current_user.id).await?;
-    let responses: Vec<VendorResponse> = vendors.iter().map(VendorResponse::from).collect();
-    Ok(Json(CursorPaginatedResponse::from_rows(responses, params.effective_limit(), |r| r.id)))
+    let vendors = repo.list_vendors(&params, &current_user.id, &period).await?;
+    let responses: Vec<VendorWithPeriodStatsResponse> = vendors.iter().map(VendorWithPeriodStatsResponse::from).collect();
+    Ok(Json(CursorPaginatedResponse::from_rows(responses, params.effective_limit(), |r| r.vendor.id)))
 }
 
 /// Get a vendor by ID
@@ -112,8 +113,11 @@ pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
 #[cfg(test)]
 mod tests {
     use crate::{Config, build_rocket};
+    use chrono::{Duration, Utc};
+    use rocket::http::Cookie;
     use rocket::http::{ContentType, Status};
     use rocket::local::asynchronous::Client;
+    use serde_json::Value;
 
     #[rocket::async_test]
     #[ignore = "requires database"]
@@ -162,5 +166,161 @@ mod tests {
         let response = client.delete("/api/v1/vendors/invalid").dispatch().await;
 
         assert_eq!(response.status(), Status::BadRequest);
+    }
+
+    #[rocket::async_test]
+    #[ignore = "requires database"]
+    async fn test_list_vendors_includes_period_stats() {
+        let mut config = Config::default();
+        config.database.url = "postgresql://test:test@localhost/test".to_string();
+
+        let client = Client::tracked(build_rocket(config)).await.expect("valid rocket instance");
+
+        let user_payload = serde_json::json!({
+            "name": "Test User",
+            "email": "test.vendor@example.com",
+            "password": "password123"
+        });
+
+        let response = client
+            .post("/api/v1/users/")
+            .header(ContentType::JSON)
+            .body(user_payload.to_string())
+            .dispatch()
+            .await;
+
+        assert_eq!(response.status(), Status::Created);
+
+        let body = response.into_string().await.expect("user response body");
+        let user_json: Value = serde_json::from_str(&body).expect("valid user json");
+        let user_id = user_json["id"].as_str().expect("user id");
+        let user_email = user_json["email"].as_str().expect("user email");
+
+        let cookie_value = format!("{}:{}", user_id, user_email);
+        client.cookies().add_private(Cookie::build(("user", cookie_value)).path("/").build());
+
+        let currency_payload = serde_json::json!({
+            "name": "US Dollar",
+            "symbol": "$",
+            "currency": "USD",
+            "decimal_places": 2
+        });
+
+        let response = client
+            .post("/api/v1/currency/")
+            .header(ContentType::JSON)
+            .body(currency_payload.to_string())
+            .dispatch()
+            .await;
+
+        assert_eq!(response.status(), Status::Created);
+
+        let account_payload = serde_json::json!({
+            "name": "Checking",
+            "color": "#000000",
+            "icon": "bank",
+            "account_type": "Checking",
+            "currency": "USD",
+            "balance": 1000,
+            "spend_limit": null
+        });
+
+        let response = client
+            .post("/api/v1/accounts/")
+            .header(ContentType::JSON)
+            .body(account_payload.to_string())
+            .dispatch()
+            .await;
+
+        assert_eq!(response.status(), Status::Created);
+
+        let body = response.into_string().await.expect("account response body");
+        let account_json: Value = serde_json::from_str(&body).expect("valid account json");
+        let account_id = account_json["id"].as_str().expect("account id");
+
+        let category_payload = serde_json::json!({
+            "name": "Dining",
+            "color": "#00FF00",
+            "icon": "fork",
+            "parent_id": null,
+            "category_type": "Outgoing"
+        });
+
+        let response = client
+            .post("/api/v1/categories/")
+            .header(ContentType::JSON)
+            .body(category_payload.to_string())
+            .dispatch()
+            .await;
+
+        assert_eq!(response.status(), Status::Created);
+
+        let body = response.into_string().await.expect("category response body");
+        let category_json: Value = serde_json::from_str(&body).expect("valid category json");
+        let category_id = category_json["id"].as_str().expect("category id");
+
+        let vendor_payload = serde_json::json!({
+            "name": "Vendor Co"
+        });
+
+        let response = client
+            .post("/api/v1/vendors/")
+            .header(ContentType::JSON)
+            .body(vendor_payload.to_string())
+            .dispatch()
+            .await;
+
+        assert_eq!(response.status(), Status::Created);
+
+        let body = response.into_string().await.expect("vendor response body");
+        let vendor_json: Value = serde_json::from_str(&body).expect("valid vendor json");
+        let vendor_id = vendor_json["id"].as_str().expect("vendor id");
+
+        let today = Utc::now().date_naive();
+        let period_payload = serde_json::json!({
+            "name": "Current Period",
+            "start_date": (today - Duration::days(1)).to_string(),
+            "end_date": (today + Duration::days(1)).to_string()
+        });
+
+        let response = client
+            .post("/api/v1/budget_period/")
+            .header(ContentType::JSON)
+            .body(period_payload.to_string())
+            .dispatch()
+            .await;
+
+        assert_eq!(response.status(), Status::Created);
+
+        let tx_payload = serde_json::json!({
+            "amount": 250,
+            "description": "Lunch",
+            "occurred_at": today.to_string(),
+            "category_id": category_id,
+            "from_account_id": account_id,
+            "to_account_id": null,
+            "vendor_id": vendor_id
+        });
+
+        let response = client
+            .post("/api/v1/transactions/")
+            .header(ContentType::JSON)
+            .body(tx_payload.to_string())
+            .dispatch()
+            .await;
+
+        assert_eq!(response.status(), Status::Created);
+
+        let response = client.get("/api/v1/vendors/?limit=50").dispatch().await;
+        assert_eq!(response.status(), Status::Ok);
+
+        let body = response.into_string().await.expect("vendors response body");
+        let list_json: Value = serde_json::from_str(&body).expect("valid vendors json");
+        let data = list_json["data"].as_array().expect("data array");
+        let vendor = data.iter().find(|item| item["id"].as_str() == Some(vendor_id)).expect("vendor in list");
+
+        let expected_last_used = today.to_string();
+        assert_eq!(vendor["transaction_count"].as_i64(), Some(1));
+        assert_eq!(vendor["last_used_at"].as_str(), Some(expected_last_used.as_str()));
     }
 }
