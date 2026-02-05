@@ -313,7 +313,7 @@ mod tests {
         let data = list_json["data"].as_array().expect("data array");
         let category = data.iter().find(|item| item["id"].as_str() == Some(category_id)).expect("category in list");
 
-        assert_eq!(category["used_this_month"].as_i64(), Some(500));
+        assert_eq!(category["used_in_period"].as_i64(), Some(500));
         assert_eq!(category["transaction_count"].as_i64(), Some(1));
         assert_eq!(category["difference_vs_average_percentage"].as_i64(), Some(100));
     }

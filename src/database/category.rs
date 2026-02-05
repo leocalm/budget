@@ -45,7 +45,7 @@ struct CategoryWithStatsRow {
     parent_id: Option<Uuid>,
     category_type: String,
     created_at: DateTime<Utc>,
-    used_this_month: i64,
+    used_in_period: i64,
     average_period_usage: i64,
     transaction_count: i64,
 }
@@ -64,8 +64,8 @@ impl From<CategoryWithStatsRow> for CategoryWithStats {
                 created_at: row.created_at,
             },
             stats: CategoryStats {
-                used_this_month: row.used_this_month,
-                difference_vs_average_percentage: difference_vs_average_percentage(row.used_this_month, row.average_period_usage),
+                used_in_period: row.used_in_period,
+                difference_vs_average_percentage: difference_vs_average_percentage(row.used_in_period, row.average_period_usage),
                 transaction_count: row.transaction_count,
             },
         }
@@ -183,7 +183,7 @@ SELECT
     c.parent_id,
     c.category_type::text as category_type,
     c.created_at,
-    COALESCE(spt.used_this_period, 0) AS used_this_month,
+    COALESCE(spt.used_this_period, 0) AS used_in_period,
     COALESCE(at.avg_period_amount, 0) AS average_period_usage,
     COALESCE(spc.transaction_count, 0) AS transaction_count
 FROM category c
@@ -260,7 +260,7 @@ SELECT
     c.parent_id,
     c.category_type::text as category_type,
     c.created_at,
-    COALESCE(spt.used_this_period, 0) AS used_this_month,
+    COALESCE(spt.used_this_period, 0) AS used_in_period,
     COALESCE(at.avg_period_amount, 0) AS average_period_usage,
     COALESCE(spc.transaction_count, 0) AS transaction_count
 FROM category c
