@@ -28,20 +28,19 @@ pub async fn create_category(
     Ok((Status::Created, Json(CategoryResponse::from(&category))))
 }
 
-/// List all categories with cursor-based pagination
+/// List all categories with cursor-based pagination and stats for a selected budget period
 #[openapi(tag = "Categories")]
 #[get("/?<period_id>&<cursor>&<limit>")]
 pub async fn list_all_categories(
     pool: &State<PgPool>,
     _rate_limit: RateLimit,
     current_user: CurrentUser,
-    period_id: Option<String>,
+    period_id: String,
     cursor: Option<String>,
     limit: Option<i64>,
 ) -> Result<Json<CursorPaginatedResponse<CategoryWithStatsResponse>>, AppError> {
     let repo = PostgresRepository { pool: pool.inner().clone() };
     let params = CursorParams::from_query(cursor, limit)?;
-    let period_id = period_id.ok_or_else(|| AppError::BadRequest("Missing period_id".to_string()))?;
     let period_uuid = Uuid::parse_str(&period_id).map_err(|e| AppError::uuid("Invalid period id", e))?;
     let period = repo.get_budget_period(&period_uuid, &current_user.id).await?;
 

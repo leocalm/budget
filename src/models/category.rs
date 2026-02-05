@@ -48,9 +48,12 @@ pub struct CategoryResponse {
 
 #[derive(Serialize, Debug, Clone, JsonSchema)]
 pub struct CategoryStats {
+    #[schemars(description = "Total amount used in the selected budget period.")]
     pub used_this_month: i64,
     /// Percentage of usage in the selected period vs average period usage.
+    #[schemars(description = "Percentage of usage in the selected period vs average period usage.")]
     pub difference_vs_average_percentage: i32,
+    #[schemars(description = "Number of transactions in the selected budget period.")]
     pub transaction_count: i64,
 }
 
