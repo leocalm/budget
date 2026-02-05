@@ -48,7 +48,7 @@ fn account_responses(accounts: &[AccountWithMetrics], balance_per_day: &[Account
                 balance: account.current_balance,
                 spend_limit: account_data.spend_limit,
                 balance_per_day: per_day,
-                balance_change_this_month: account.balance_change_this_month,
+                balance_change_this_period: account.balance_change_this_period,
                 transaction_count: account.transaction_count,
             }
         })
@@ -80,7 +80,7 @@ mod tests {
         let metrics = AccountWithMetrics {
             account: account.clone(),
             current_balance: 1200,
-            balance_change_this_month: 200,
+            balance_change_this_period: 200,
             transaction_count: 2,
         };
         let balances = vec![
@@ -101,7 +101,7 @@ mod tests {
         assert_eq!(responses.len(), 1);
         assert_eq!(responses[0].id, account.id);
         assert_eq!(responses[0].balance, 1200);
-        assert_eq!(responses[0].balance_change_this_month, 200);
+        assert_eq!(responses[0].balance_change_this_period, 200);
         assert_eq!(responses[0].transaction_count, 2);
         assert_eq!(responses[0].balance_per_day.len(), 2);
     }
@@ -112,7 +112,7 @@ mod tests {
         let metrics = AccountWithMetrics {
             account: account.clone(),
             current_balance: 1000,
-            balance_change_this_month: 0,
+            balance_change_this_period: 0,
             transaction_count: 0,
         };
         let responses = account_responses(&[metrics], &[]);

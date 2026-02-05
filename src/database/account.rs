@@ -68,7 +68,7 @@ struct AccountMetricsRow {
     currency_decimal_places: i32,
     currency_created_at: DateTime<Utc>,
     current_balance: i64,
-    balance_change_this_month: i64,
+    balance_change_this_period: i64,
     transaction_count: i64,
 }
 
@@ -95,7 +95,7 @@ impl From<AccountMetricsRow> for AccountWithMetrics {
                 spend_limit: row.spend_limit,
             },
             current_balance: row.current_balance,
-            balance_change_this_month: row.balance_change_this_month,
+            balance_change_this_period: row.balance_change_this_period,
             transaction_count: row.transaction_count,
         }
     }
@@ -249,7 +249,7 @@ impl PostgresRepository {
                                 END
                             ELSE 0
                         END
-                    ), 0)::bigint AS balance_change_this_month,
+                    ), 0)::bigint AS balance_change_this_period,
                     COALESCE(SUM(
                         CASE
                             WHEN t.from_account_id = a.id THEN 1
@@ -340,7 +340,7 @@ impl PostgresRepository {
                                 END
                             ELSE 0
                         END
-                    ), 0)::bigint AS balance_change_this_month,
+                    ), 0)::bigint AS balance_change_this_period,
                     COALESCE(SUM(
                         CASE
                             WHEN t.from_account_id = a.id THEN 1

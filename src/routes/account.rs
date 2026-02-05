@@ -297,7 +297,7 @@ mod tests {
             .expect("account in response");
 
         assert_eq!(account_json["balance"].as_i64().unwrap_or_default(), 7_500);
-        assert_eq!(account_json["balance_change_this_month"].as_i64().unwrap_or_default(), -2_500);
+        assert_eq!(account_json["balance_change_this_period"].as_i64().unwrap_or_default(), -2_500);
         assert_eq!(account_json["transaction_count"].as_i64().unwrap_or_default(), 1);
 
         let balance_per_day = account_json["balance_per_day"].as_array().expect("balance_per_day array");

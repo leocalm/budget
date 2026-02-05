@@ -90,7 +90,7 @@ pub struct AccountListResponse {
     pub balance: i64,
     pub spend_limit: Option<i32>,
     pub balance_per_day: Vec<BudgetPerDayResponse>,
-    pub balance_change_this_month: i64,
+    pub balance_change_this_period: i64,
     pub transaction_count: i64,
 }
 
@@ -98,7 +98,7 @@ pub struct AccountListResponse {
 pub struct AccountWithMetrics {
     pub account: Account,
     pub current_balance: i64,
-    pub balance_change_this_month: i64,
+    pub balance_change_this_period: i64,
     pub transaction_count: i64,
 }
 
