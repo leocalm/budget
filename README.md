@@ -40,8 +40,8 @@ All API endpoints are versioned and mounted under `/api/v1` by default. The curr
 
 #### API Documentation
 
-- Swagger/OpenAPI documentation is available at `/api/v1/docs` by default
-- OpenAPI spec is available at `/api/v1/openapi.json` by default
+- Swagger/OpenAPI documentation is hidden by default
+- Enable it by setting `BUDGET_API__ENABLE_SWAGGER=true` (then `/api/v1/docs` and `/api/v1/openapi.json` are available)
 
 For complete API lifecycle information including deprecation policies and migration guides, see [API_LIFECYCLE.md](API_LIFECYCLE.md).
 

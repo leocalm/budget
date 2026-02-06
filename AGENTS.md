@@ -53,7 +53,7 @@ Key sections and their defaults:
 | | `address` | `127.0.0.1` |
 | `[logging]` | `level` | `info` |
 | | `json_format` | `false` |
-| `[cors]` | `allowed_origins` | `["*"]` |
+| `[cors]` | `allowed_origins` | `[]` |
 | | `allow_credentials` | `false` |
 | `[rate_limit]` | `read_limit` | 300 |
 | | `mutation_limit` | 60 |
@@ -63,8 +63,10 @@ Key sections and their defaults:
 | | `require_client_ip` | `true` |
 | `[api]` | `base_path` | `/api/v1` |
 | | `additional_base_paths` | `[]` |
+| | `enable_swagger` | `false` |
 
 > Wildcard origins (`*`) combined with `allow_credentials = true` is an invalid combination and will panic at startup.
+> Swagger/OpenAPI routes are hidden unless `api.enable_swagger` is explicitly enabled.
 
 ## Database Setup
 
