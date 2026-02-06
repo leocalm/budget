@@ -55,6 +55,31 @@ fn ensure_rocket_secret_key() {
 }
 
 fn build_cors(cors_config: &config::CorsConfig) -> CorsOptions {
+    if cors_config.allowed_origins.is_empty() {
+        if cors_config.allow_credentials {
+            panic!("Invalid CORS configuration: allow_credentials requires explicit allowed_origins.");
+        }
+        // Secure default: no CORS origins are allowed unless explicitly configured.
+        return CorsOptions {
+            allowed_origins: AllowedOrigins::some_exact::<&str>(&[]),
+            allowed_methods: vec![
+                Method::Get,
+                Method::Post,
+                Method::Put,
+                Method::Delete,
+                Method::Patch,
+                Method::Options,
+                Method::Head,
+            ]
+            .into_iter()
+            .map(From::from)
+            .collect(),
+            allowed_headers: rocket_cors::AllowedHeaders::some(&["Content-Type", "Authorization", "Accept"]),
+            allow_credentials: false,
+            ..Default::default()
+        };
+    }
+
     let is_wildcard = cors_config.allowed_origins.len() == 1 && cors_config.allowed_origins[0] == "*";
 
     // Validate that wildcard origins are not combined with credentials
@@ -166,6 +191,22 @@ fn stage_rate_limiter(rate_limit_config: config::RateLimitConfig) -> AdHoc {
     })
 }
 
+fn api_routes() -> Vec<rocket::Route> {
+    let mut routes = Vec::new();
+    routes.extend(app_routes::account::routes().0);
+    routes.extend(app_routes::user::routes().0);
+    routes.extend(app_routes::currency::routes().0);
+    routes.extend(app_routes::category::routes().0);
+    routes.extend(app_routes::budget::routes().0);
+    routes.extend(app_routes::budget_category::routes().0);
+    routes.extend(app_routes::transaction::routes().0);
+    routes.extend(app_routes::vendor::routes().0);
+    routes.extend(app_routes::health::routes().0);
+    routes.extend(app_routes::dashboard::routes().0);
+    routes.extend(app_routes::budget_period::routes().0);
+    routes
+}
+
 pub fn build_rocket(config: Config) -> Rocket<Build> {
     init_tracing(&config.logging.level, config.logging.json_format);
     ensure_rocket_secret_key();
@@ -183,35 +224,10 @@ pub fn build_rocket(config: Config) -> Rocket<Build> {
 
     let (primary_base_path, additional_base_paths) = base_paths.split_first().expect("API base paths must include at least one entry");
 
-    let settings = rocket_okapi::settings::OpenApiSettings::default();
-    rocket_okapi::mount_endpoints_and_merged_docs! {
-        rocket, primary_base_path.clone(), settings,
-        "/accounts" => app_routes::account::routes(),
-        "/users" => app_routes::user::routes(),
-        "/currency" => app_routes::currency::routes(),
-        "/categories" => app_routes::category::routes(),
-        "/budgets" => app_routes::budget::routes(),
-        "/budget-categories" => app_routes::budget_category::routes(),
-        "/transactions" => app_routes::transaction::routes(),
-        "/vendors" => app_routes::vendor::routes(),
-        "/health" => app_routes::health::routes(),
-        "/dashboard" => app_routes::dashboard::routes(),
-        "/budget_period" => app_routes::budget_period::routes(),
-    }
-
-    let docs_path = join_base_path(primary_base_path, "docs");
-    let primary_openapi_url = join_base_path(primary_base_path, "openapi.json");
-    rocket = rocket.mount(docs_path, make_swagger_ui(&get_swagger_config(&primary_openapi_url)));
-
-    rocket = rocket.register(
-        primary_base_path.as_str(),
-        catchers![app_routes::error::not_found, app_routes::error::conflict, app_routes::error::too_many_requests],
-    );
-
-    for base_path in additional_base_paths {
+    if config.api.expose_docs {
         let settings = rocket_okapi::settings::OpenApiSettings::default();
         rocket_okapi::mount_endpoints_and_merged_docs! {
-            rocket, base_path.clone(), settings,
+            rocket, primary_base_path.clone(), settings,
             "/accounts" => app_routes::account::routes(),
             "/users" => app_routes::user::routes(),
             "/currency" => app_routes::currency::routes(),
@@ -225,9 +241,42 @@ pub fn build_rocket(config: Config) -> Rocket<Build> {
             "/budget_period" => app_routes::budget_period::routes(),
         }
 
-        let docs_path = join_base_path(base_path, "docs");
-        let docs_openapi_url = join_base_path(base_path, "openapi.json");
-        rocket = rocket.mount(docs_path, make_swagger_ui(&get_swagger_config(&docs_openapi_url)));
+        let docs_path = join_base_path(primary_base_path, "docs");
+        let primary_openapi_url = join_base_path(primary_base_path, "openapi.json");
+        rocket = rocket.mount(docs_path, make_swagger_ui(&get_swagger_config(&primary_openapi_url)));
+    } else {
+        rocket = rocket.mount(primary_base_path.clone(), api_routes());
+    }
+
+    rocket = rocket.register(
+        primary_base_path.as_str(),
+        catchers![app_routes::error::not_found, app_routes::error::conflict, app_routes::error::too_many_requests],
+    );
+
+    for base_path in additional_base_paths {
+        if config.api.expose_docs {
+            let settings = rocket_okapi::settings::OpenApiSettings::default();
+            rocket_okapi::mount_endpoints_and_merged_docs! {
+                rocket, base_path.clone(), settings,
+                "/accounts" => app_routes::account::routes(),
+                "/users" => app_routes::user::routes(),
+                "/currency" => app_routes::currency::routes(),
+                "/categories" => app_routes::category::routes(),
+                "/budgets" => app_routes::budget::routes(),
+                "/budget-categories" => app_routes::budget_category::routes(),
+                "/transactions" => app_routes::transaction::routes(),
+                "/vendors" => app_routes::vendor::routes(),
+                "/health" => app_routes::health::routes(),
+                "/dashboard" => app_routes::dashboard::routes(),
+                "/budget_period" => app_routes::budget_period::routes(),
+            }
+
+            let docs_path = join_base_path(base_path, "docs");
+            let docs_openapi_url = join_base_path(base_path, "openapi.json");
+            rocket = rocket.mount(docs_path, make_swagger_ui(&get_swagger_config(&docs_openapi_url)));
+        } else {
+            rocket = rocket.mount(base_path.clone(), api_routes());
+        }
 
         rocket = rocket.register(
             base_path.as_str(),

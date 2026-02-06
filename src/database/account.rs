@@ -122,7 +122,7 @@ impl PostgresRepository {
         }
 
         let currency = self
-            .get_currency_by_code(&request.currency)
+            .get_currency_by_code(&request.currency, user_id)
             .await?
             .ok_or_else(|| AppError::CurrencyDoesNotExist(request.currency.clone()))?;
 
@@ -544,7 +544,7 @@ ORDER BY a.id, d.day
         }
 
         let currency = self
-            .get_currency_by_code(&request.currency)
+            .get_currency_by_code(&request.currency, user_id)
             .await?
             .ok_or_else(|| AppError::CurrencyDoesNotExist(request.currency.clone()))?;
 
