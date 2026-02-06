@@ -91,7 +91,7 @@ pub async fn post_user_login(
 #[openapi(tag = "Users")]
 #[post("/logout")]
 pub async fn post_user_logout(_rate_limit: RateLimit, cookies: &CookieJar<'_>) -> Status {
-    cookies.remove_private(build_auth_cookie(""));
+    cookies.remove_private(build_auth_cookie_removal());
     Status::Ok
 }
 
@@ -111,10 +111,11 @@ pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
     rocket_okapi::openapi_get_routes_spec![post_user, post_user_login, post_user_logout, put_user, delete_user_route, get_me]
 }
 
-fn build_auth_cookie(value: &str) -> Cookie<'static> {
-    let same_site = if is_release_profile() { SameSite::Strict } else { SameSite::Lax };
+pub(crate) fn build_auth_cookie(value: &str) -> Cookie<'static> {
+    let is_release = is_release_profile();
+    let same_site = if is_release { SameSite::Strict } else { SameSite::Lax };
     let mut builder = Cookie::build(("user", value.to_string())).path("/").http_only(true).same_site(same_site);
-    if is_release_profile() {
+    if is_release {
         builder = builder.secure(true);
     }
     builder.build()
@@ -122,6 +123,16 @@ fn build_auth_cookie(value: &str) -> Cookie<'static> {
 
 fn is_release_profile() -> bool {
     matches!(std::env::var("ROCKET_PROFILE").as_deref(), Ok("release"))
+}
+
+fn build_auth_cookie_removal() -> Cookie<'static> {
+    let is_release = is_release_profile();
+    let same_site = if is_release { SameSite::Strict } else { SameSite::Lax };
+    let mut builder = Cookie::build("user").path("/").http_only(true).same_site(same_site);
+    if is_release {
+        builder = builder.secure(true);
+    }
+    builder.build()
 }
 
 /// Check whether a sqlx error is a PostgreSQL unique-constraint violation (error code 23505).
