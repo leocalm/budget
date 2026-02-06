@@ -1,4 +1,4 @@
-use crate::database::postgres_repository::PostgresRepository;
+use crate::database::postgres_repository::{PostgresRepository, is_unique_violation};
 use crate::error::app_error::AppError;
 use crate::models::budget_period::BudgetPeriod;
 use crate::models::category::{Category, CategoryRequest, CategoryStats, CategoryType, CategoryWithStats, difference_vs_average_percentage};
@@ -74,6 +74,24 @@ impl From<CategoryWithStatsRow> for CategoryWithStats {
 
 impl PostgresRepository {
     pub async fn create_category(&self, request: &CategoryRequest, user_id: &Uuid) -> Result<Category, AppError> {
+        let name_exists: bool = sqlx::query_scalar(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM category
+                WHERE user_id = $1 AND name = $2
+            )
+            "#,
+        )
+        .bind(user_id)
+        .bind(&request.name)
+        .fetch_one(&self.pool)
+        .await?;
+
+        if name_exists {
+            return Err(AppError::BadRequest("Category name already exists".to_string()));
+        }
+
         let row = sqlx::query_as::<_, CategoryRow>(
             r#"
             INSERT INTO category (user_id, name, color, icon, parent_id, category_type)
@@ -96,7 +114,15 @@ impl PostgresRepository {
         .bind(request.parent_id)
         .bind(request.category_type_to_db())
         .fetch_one(&self.pool)
-        .await?;
+        .await;
+
+        let row = match row {
+            Ok(row) => row,
+            Err(err) if is_unique_violation(&err) => {
+                return Err(AppError::BadRequest("Category name already exists".to_string()));
+            }
+            Err(err) => return Err(err.into()),
+        };
 
         Ok(Category::from(row))
     }
@@ -294,6 +320,25 @@ LIMIT $4
     }
 
     pub async fn update_category(&self, id: &Uuid, request: &CategoryRequest, user_id: &Uuid) -> Result<Category, AppError> {
+        let name_exists: bool = sqlx::query_scalar(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM category
+                WHERE user_id = $1 AND name = $2 AND id <> $3
+            )
+            "#,
+        )
+        .bind(user_id)
+        .bind(&request.name)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        if name_exists {
+            return Err(AppError::BadRequest("Category name already exists".to_string()));
+        }
+
         let row = sqlx::query_as::<_, CategoryRow>(
             r#"
             UPDATE category
@@ -318,7 +363,15 @@ LIMIT $4
         .bind(id)
         .bind(user_id)
         .fetch_one(&self.pool)
-        .await?;
+        .await;
+
+        let row = match row {
+            Ok(row) => row,
+            Err(err) if is_unique_violation(&err) => {
+                return Err(AppError::BadRequest("Category name already exists".to_string()));
+            }
+            Err(err) => return Err(err.into()),
+        };
 
         Ok(Category::from(row))
     }

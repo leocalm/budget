@@ -6,6 +6,7 @@ pub mod category;
 pub mod currency;
 pub mod dashboard;
 pub mod postgres_repository;
+pub mod session;
 pub mod transaction;
 pub mod user;
 pub mod vendor;
