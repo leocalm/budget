@@ -1,4 +1,4 @@
-use crate::database::postgres_repository::PostgresRepository;
+use crate::database::postgres_repository::{PostgresRepository, is_unique_violation};
 use crate::error::app_error::AppError;
 use crate::models::budget_period::BudgetPeriod;
 use crate::models::pagination::CursorParams;
@@ -20,6 +20,24 @@ pub enum VendorOrderBy {
 
 impl PostgresRepository {
     pub async fn create_vendor(&self, request: &VendorRequest, user_id: &Uuid) -> Result<Vendor, AppError> {
+        let name_exists: bool = sqlx::query_scalar(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM vendor
+                WHERE user_id = $1 AND name = $2
+            )
+            "#,
+        )
+        .bind(user_id)
+        .bind(&request.name)
+        .fetch_one(&self.pool)
+        .await?;
+
+        if name_exists {
+            return Err(AppError::BadRequest("Vendor name already exists".to_string()));
+        }
+
         let vendor = sqlx::query_as::<_, Vendor>(
             r#"
             INSERT INTO vendor (user_id, name)
@@ -30,7 +48,15 @@ impl PostgresRepository {
         .bind(user_id)
         .bind(&request.name)
         .fetch_one(&self.pool)
-        .await?;
+        .await;
+
+        let vendor = match vendor {
+            Ok(vendor) => vendor,
+            Err(err) if is_unique_violation(&err) => {
+                return Err(AppError::BadRequest("Vendor name already exists".to_string()));
+            }
+            Err(err) => return Err(err.into()),
+        };
 
         Ok(vendor)
     }
@@ -207,6 +233,25 @@ LIMIT $4
     }
 
     pub async fn update_vendor(&self, id: &Uuid, request: &VendorRequest, user_id: &Uuid) -> Result<Vendor, AppError> {
+        let name_exists: bool = sqlx::query_scalar(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM vendor
+                WHERE user_id = $1 AND name = $2 AND id <> $3
+            )
+            "#,
+        )
+        .bind(user_id)
+        .bind(&request.name)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        if name_exists {
+            return Err(AppError::BadRequest("Vendor name already exists".to_string()));
+        }
+
         let vendor = sqlx::query_as::<_, Vendor>(
             r#"
             UPDATE vendor
@@ -219,7 +264,15 @@ LIMIT $4
         .bind(id)
         .bind(user_id)
         .fetch_one(&self.pool)
-        .await?;
+        .await;
+
+        let vendor = match vendor {
+            Ok(vendor) => vendor,
+            Err(err) if is_unique_violation(&err) => {
+                return Err(AppError::BadRequest("Vendor name already exists".to_string()));
+            }
+            Err(err) => return Err(err.into()),
+        };
 
         Ok(vendor)
     }

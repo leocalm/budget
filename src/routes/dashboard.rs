@@ -121,7 +121,7 @@ mod tests {
     use super::parse_period_id;
     use crate::error::app_error::AppError;
     use crate::{Config, build_rocket};
-    use rocket::http::{ContentType, Cookie, Status};
+    use rocket::http::{ContentType, Status};
     use rocket::local::asynchronous::Client;
     use serde_json::Value;
     use uuid::Uuid;
@@ -137,7 +137,7 @@ mod tests {
         let payload = serde_json::json!({
             "name": format!("Test User {}", unique),
             "email": format!("test.user.{}@example.com", unique),
-            "password": "password123"
+            "password": "CorrectHorseBatteryStaple!2026"
         });
 
         let response = client
@@ -150,13 +150,22 @@ mod tests {
 
         let body = response.into_string().await.expect("user response body");
         let user_json: Value = serde_json::from_str(&body).expect("valid user json");
-        let user_id = user_json["id"].as_str().expect("user id").to_string();
         let user_email = user_json["email"].as_str().expect("user email").to_string();
+        let login_payload = serde_json::json!({
+            "email": user_email,
+            "password": "CorrectHorseBatteryStaple!2026"
+        });
 
-        let cookie_value = format!("{}:{}", user_id, user_email);
-        client.cookies().add_private(Cookie::build(("user", cookie_value)).path("/").build());
+        let login_response = client
+            .post("/api/v1/users/login")
+            .header(ContentType::JSON)
+            .body(login_payload.to_string())
+            .dispatch()
+            .await;
 
-        (user_id, user_email)
+        assert_eq!(login_response.status(), Status::Ok);
+
+        (user_json["id"].as_str().expect("user id").to_string(), user_email)
     }
 
     async fn create_currency(client: &Client, code: &str) {

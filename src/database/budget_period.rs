@@ -1,4 +1,4 @@
-use crate::database::postgres_repository::PostgresRepository;
+use crate::database::postgres_repository::{PostgresRepository, is_unique_violation};
 use crate::error::app_error::AppError;
 use crate::models::budget_period::{BudgetPeriod, BudgetPeriodRequest};
 use crate::models::pagination::CursorParams;
@@ -6,6 +6,24 @@ use uuid::Uuid;
 
 impl PostgresRepository {
     pub async fn create_budget_period(&self, request: &BudgetPeriodRequest, user_id: &Uuid) -> Result<Uuid, AppError> {
+        let name_exists: bool = sqlx::query_scalar(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM budget_period
+                WHERE user_id = $1 AND name = $2
+            )
+            "#,
+        )
+        .bind(user_id)
+        .bind(&request.name)
+        .fetch_one(&self.pool)
+        .await?;
+
+        if name_exists {
+            return Err(AppError::BadRequest("Budget period name already exists".to_string()));
+        }
+
         #[derive(sqlx::FromRow)]
         struct IdRow {
             id: Uuid,
@@ -23,7 +41,15 @@ impl PostgresRepository {
         .bind(request.start_date)
         .bind(request.end_date)
         .fetch_one(&self.pool)
-        .await?;
+        .await;
+
+        let row = match row {
+            Ok(row) => row,
+            Err(err) if is_unique_violation(&err) => {
+                return Err(AppError::BadRequest("Budget period name already exists".to_string()));
+            }
+            Err(err) => return Err(err.into()),
+        };
 
         Ok(row.id)
     }
@@ -100,6 +126,25 @@ impl PostgresRepository {
     }
 
     pub async fn update_budget_period(&self, id: &Uuid, request: &BudgetPeriodRequest, user_id: &Uuid) -> Result<BudgetPeriod, AppError> {
+        let name_exists: bool = sqlx::query_scalar(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM budget_period
+                WHERE user_id = $1 AND name = $2 AND id <> $3
+            )
+            "#,
+        )
+        .bind(user_id)
+        .bind(&request.name)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        if name_exists {
+            return Err(AppError::BadRequest("Budget period name already exists".to_string()));
+        }
+
         let budget_period = sqlx::query_as::<_, BudgetPeriod>(
             r#"
             UPDATE budget_period
@@ -114,7 +159,15 @@ impl PostgresRepository {
         .bind(id)
         .bind(user_id)
         .fetch_one(&self.pool)
-        .await?;
+        .await;
+
+        let budget_period = match budget_period {
+            Ok(budget_period) => budget_period,
+            Err(err) if is_unique_violation(&err) => {
+                return Err(AppError::BadRequest("Budget period name already exists".to_string()));
+            }
+            Err(err) => return Err(err.into()),
+        };
 
         Ok(budget_period)
     }

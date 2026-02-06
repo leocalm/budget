@@ -12,6 +12,7 @@ pub struct Config {
     pub logging: LoggingConfig,
     pub cors: CorsConfig,
     pub rate_limit: RateLimitConfig,
+    pub session: SessionConfig,
     pub api: ApiConfig,
 }
 
@@ -50,6 +51,21 @@ pub struct RateLimitConfig {
     pub window_seconds: u64,
     pub cleanup_interval_seconds: u64,
     pub require_client_ip: bool,
+    pub backend: RateLimitBackend,
+    pub redis_url: String,
+    pub redis_key_prefix: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RateLimitBackend {
+    Redis,
+    InMemory,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct SessionConfig {
+    pub ttl_seconds: i64,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -108,6 +124,17 @@ impl Default for RateLimitConfig {
             window_seconds: 60,
             cleanup_interval_seconds: 60,
             require_client_ip: true,
+            backend: RateLimitBackend::InMemory,
+            redis_url: "redis://127.0.0.1:6379/0".to_string(),
+            redis_key_prefix: "budget:rate_limit:".to_string(),
+        }
+    }
+}
+
+impl Default for SessionConfig {
+    fn default() -> Self {
+        Self {
+            ttl_seconds: 60 * 60 * 24 * 30,
         }
     }
 }
