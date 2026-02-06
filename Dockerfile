@@ -4,7 +4,7 @@ FROM rust:1.84-bookworm AS builder
 WORKDIR /app
 
 # Install sqlx-cli for migrations
-RUN cargo install sqlx-cli --no-default-features --features rustls,postgres
+RUN cargo install sqlx-cli --version 0.7.4 --locked --no-default-features --features rustls,postgres
 
 # Copy manifests
 COPY Cargo.toml Cargo.lock ./
