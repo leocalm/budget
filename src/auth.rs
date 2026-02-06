@@ -1,3 +1,4 @@
+use crate::database::postgres_repository::PostgresRepository;
 use crate::error::app_error::AppError;
 use rocket::http::Status;
 use rocket::outcome::Outcome;
@@ -6,6 +7,7 @@ use rocket_okapi::r#gen::OpenApiGenerator;
 use rocket_okapi::okapi::openapi3::{Object, Responses, SecurityRequirement, SecurityScheme, SecuritySchemeData};
 use rocket_okapi::request::{OpenApiFromRequest, RequestHeaderInput};
 use serde::Serialize;
+use sqlx::PgPool;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize)]
@@ -14,10 +16,11 @@ pub struct CurrentUser {
     pub username: String,
 }
 
-pub(crate) fn parse_user_cookie_value(value: &str) -> Option<(Uuid, String)> {
-    let (id_str, username) = value.split_once(':')?;
-    let id = Uuid::parse_str(id_str).ok()?;
-    Some((id, username.to_string()))
+pub(crate) fn parse_session_cookie_value(value: &str) -> Option<(Uuid, Uuid)> {
+    let (session_id_str, user_id_str) = value.split_once(':')?;
+    let session_id = Uuid::parse_str(session_id_str).ok()?;
+    let user_id = Uuid::parse_str(user_id_str).ok()?;
+    Some((session_id, user_id))
 }
 
 #[rocket::async_trait]
@@ -27,9 +30,27 @@ impl<'r> FromRequest<'r> for CurrentUser {
     async fn from_request(req: &'r Request<'_>) -> RequestOutcome<Self, Self::Error> {
         let cookies = req.cookies();
         if let Some(cookie) = cookies.get_private("user")
-            && let Some((id, username)) = parse_user_cookie_value(cookie.value())
+            && let Some((session_id, user_id)) = parse_session_cookie_value(cookie.value())
         {
-            return Outcome::Success(CurrentUser { id, username });
+            let pool = match req.rocket().state::<PgPool>() {
+                Some(pool) => pool,
+                None => return Outcome::Error((Status::InternalServerError, AppError::Unauthorized)),
+            };
+
+            let repo = PostgresRepository { pool: pool.clone() };
+
+            match repo.get_active_session_user(&session_id, &user_id).await {
+                Ok(Some(user)) => {
+                    let current_user = CurrentUser {
+                        id: user.id,
+                        username: user.email,
+                    };
+                    req.local_cache(|| Some(current_user.clone()));
+                    return Outcome::Success(current_user);
+                }
+                Ok(None) => return Outcome::Error((Status::Unauthorized, AppError::InvalidCredentials)),
+                Err(err) => return Outcome::Error((Status::InternalServerError, err)),
+            }
         }
 
         Outcome::Error((Status::Unauthorized, AppError::InvalidCredentials))
@@ -70,26 +91,27 @@ impl<'a> OpenApiFromRequest<'a> for CurrentUser {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_user_cookie_value;
+    use super::parse_session_cookie_value;
     use uuid::Uuid;
 
     #[test]
-    fn parse_user_cookie_value_valid() {
-        let id = Uuid::new_v4();
-        let value = format!("{}:user@example.com", id);
-        let parsed = parse_user_cookie_value(&value);
-        assert!(matches!(parsed, Some((parsed_id, username)) if parsed_id == id && username == "user@example.com"));
+    fn parse_session_cookie_value_valid() {
+        let session_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let value = format!("{}:{}", session_id, user_id);
+        let parsed = parse_session_cookie_value(&value);
+        assert!(matches!(parsed, Some((parsed_session_id, parsed_user_id)) if parsed_session_id == session_id && parsed_user_id == user_id));
     }
 
     #[test]
-    fn parse_user_cookie_value_invalid_uuid() {
-        let parsed = parse_user_cookie_value("not-a-uuid:user@example.com");
+    fn parse_session_cookie_value_invalid_uuid() {
+        let parsed = parse_session_cookie_value("not-a-uuid:user@example.com");
         assert!(parsed.is_none());
     }
 
     #[test]
-    fn parse_user_cookie_value_missing_delimiter() {
-        let parsed = parse_user_cookie_value("missing-delimiter");
+    fn parse_session_cookie_value_missing_delimiter() {
+        let parsed = parse_session_cookie_value("missing-delimiter");
         assert!(parsed.is_none());
     }
 }

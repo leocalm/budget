@@ -6,6 +6,24 @@ use uuid::Uuid;
 
 impl PostgresRepository {
     pub async fn create_budget_period(&self, request: &BudgetPeriodRequest, user_id: &Uuid) -> Result<Uuid, AppError> {
+        let name_exists: bool = sqlx::query_scalar(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM budget_period
+                WHERE user_id = $1 AND name = $2
+            )
+            "#,
+        )
+        .bind(user_id)
+        .bind(&request.name)
+        .fetch_one(&self.pool)
+        .await?;
+
+        if name_exists {
+            return Err(AppError::BadRequest("Budget period name already exists".to_string()));
+        }
+
         #[derive(sqlx::FromRow)]
         struct IdRow {
             id: Uuid,
@@ -100,6 +118,25 @@ impl PostgresRepository {
     }
 
     pub async fn update_budget_period(&self, id: &Uuid, request: &BudgetPeriodRequest, user_id: &Uuid) -> Result<BudgetPeriod, AppError> {
+        let name_exists: bool = sqlx::query_scalar(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM budget_period
+                WHERE user_id = $1 AND name = $2 AND id <> $3
+            )
+            "#,
+        )
+        .bind(user_id)
+        .bind(&request.name)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        if name_exists {
+            return Err(AppError::BadRequest("Budget period name already exists".to_string()));
+        }
+
         let budget_period = sqlx::query_as::<_, BudgetPeriod>(
             r#"
             UPDATE budget_period

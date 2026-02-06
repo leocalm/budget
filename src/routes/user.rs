@@ -1,10 +1,12 @@
-use crate::auth::CurrentUser;
+use crate::Config;
+use crate::auth::{CurrentUser, parse_session_cookie_value};
 use crate::database::postgres_repository::PostgresRepository;
 use crate::error::app_error::AppError;
 use crate::middleware::rate_limit::{AuthRateLimit, RateLimit};
 use crate::models::user::{LoginRequest, UserRequest, UserResponse};
 use rocket::http::{Cookie, CookieJar, Status};
 use rocket::serde::json::Json;
+use rocket::time::Duration;
 use rocket::{State, delete, get, post, put};
 use rocket_okapi::openapi;
 use sqlx::PgPool;
@@ -66,6 +68,7 @@ pub async fn delete_user_route(pool: &State<PgPool>, _rate_limit: RateLimit, cur
 #[post("/login", data = "<payload>")]
 pub async fn post_user_login(
     pool: &State<PgPool>,
+    config: &State<Config>,
     _rate_limit: AuthRateLimit,
     cookies: &CookieJar<'_>,
     payload: Json<LoginRequest>,
@@ -74,8 +77,11 @@ pub async fn post_user_login(
     match repo.get_user_by_email(&payload.email).await? {
         Some(user) => {
             repo.verify_password(&user, &payload.password).await?;
-            let value = format!("{}:{}", user.id, user.email);
-            cookies.add_private(Cookie::build(("user", value)).path("/").build());
+            let ttl_seconds = config.session.ttl_seconds.max(60);
+            let expires_at = chrono::Utc::now() + chrono::Duration::seconds(ttl_seconds);
+            let session = repo.create_session(&user.id, expires_at).await?;
+            let value = format!("{}:{}", session.id, user.id);
+            cookies.add_private(Cookie::build(("user", value)).path("/").max_age(Duration::seconds(ttl_seconds)).build());
         }
         None => {
             // Equalize response timing so attackers cannot distinguish
@@ -90,7 +96,13 @@ pub async fn post_user_login(
 /// Log out the current user
 #[openapi(tag = "Users")]
 #[post("/logout")]
-pub async fn post_user_logout(_rate_limit: RateLimit, cookies: &CookieJar<'_>) -> Status {
+pub async fn post_user_logout(pool: &State<PgPool>, _rate_limit: RateLimit, cookies: &CookieJar<'_>) -> Status {
+    if let Some(cookie) = cookies.get_private("user")
+        && let Some((session_id, _)) = parse_session_cookie_value(cookie.value())
+    {
+        let repo = PostgresRepository { pool: pool.inner().clone() };
+        let _ = repo.delete_session(&session_id).await;
+    }
     cookies.remove_private(Cookie::build("user").build());
     Status::Ok
 }
@@ -122,7 +134,7 @@ fn is_unique_violation(err: &sqlx::error::Error) -> bool {
 #[cfg(test)]
 mod tests {
     use crate::{Config, build_rocket};
-    use rocket::http::{ContentType, Cookie, Status};
+    use rocket::http::{ContentType, Status};
     use rocket::local::asynchronous::Client;
     use serde_json::Value;
 
@@ -150,7 +162,7 @@ mod tests {
         let payload = serde_json::json!({
             "name": "Test User",
             "email": "test.user@example.com",
-            "password": "password123"
+            "password": "CorrectHorseBatteryStaple!2026"
         });
 
         let response = client
@@ -167,8 +179,19 @@ mod tests {
         let user_id = user_json["id"].as_str().expect("user id");
         let user_email = user_json["email"].as_str().expect("user email");
 
-        let cookie_value = format!("{}:{}", user_id, user_email);
-        client.cookies().add_private(Cookie::build(("user", cookie_value)).path("/").build());
+        let login_payload = serde_json::json!({
+            "email": user_email,
+            "password": "CorrectHorseBatteryStaple!2026"
+        });
+
+        let login_response = client
+            .post("/api/v1/users/login")
+            .header(ContentType::JSON)
+            .body(login_payload.to_string())
+            .dispatch()
+            .await;
+
+        assert_eq!(login_response.status(), Status::Ok);
 
         let response = client.get("/api/v1/users/me").dispatch().await;
 

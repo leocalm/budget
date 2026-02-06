@@ -30,3 +30,9 @@ auth_limit = 10
 window_seconds = 60
 cleanup_interval_seconds = 60
 require_client_ip = true
+backend = "redis"
+redis_url = "redis://127.0.0.1:6379/0"
+redis_key_prefix = "budget:rate_limit:"
+
+[session]
+ttl_seconds = 2592000

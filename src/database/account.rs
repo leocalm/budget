@@ -103,6 +103,24 @@ impl From<AccountMetricsRow> for AccountWithMetrics {
 
 impl PostgresRepository {
     pub async fn create_account(&self, request: &AccountRequest, user_id: &Uuid) -> Result<Account, AppError> {
+        let name_exists: bool = sqlx::query_scalar(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM account
+                WHERE user_id = $1 AND name = $2
+            )
+            "#,
+        )
+        .bind(user_id)
+        .bind(&request.name)
+        .fetch_one(&self.pool)
+        .await?;
+
+        if name_exists {
+            return Err(AppError::BadRequest("Account name already exists".to_string()));
+        }
+
         let currency = self
             .get_currency_by_code(&request.currency)
             .await?
@@ -498,6 +516,25 @@ ORDER BY a.id, d.day
     }
 
     pub async fn update_account(&self, id: &Uuid, request: &AccountRequest, user_id: &Uuid) -> Result<Account, AppError> {
+        let name_exists: bool = sqlx::query_scalar(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM account
+                WHERE user_id = $1 AND name = $2 AND id <> $3
+            )
+            "#,
+        )
+        .bind(user_id)
+        .bind(&request.name)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        if name_exists {
+            return Err(AppError::BadRequest("Account name already exists".to_string()));
+        }
+
         let currency = self
             .get_currency_by_code(&request.currency)
             .await?

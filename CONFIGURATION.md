@@ -141,6 +141,9 @@ auth_limit = 10
 window_seconds = 60
 cleanup_interval_seconds = 60
 require_client_ip = true
+backend = "redis" # redis or in_memory
+redis_url = "redis://127.0.0.1:6379/0"
+redis_key_prefix = "budget:rate_limit:"
 ```
 
 Or with environment variables:
@@ -151,11 +154,27 @@ BUDGET_RATE_LIMIT_AUTH_LIMIT=10
 BUDGET_RATE_LIMIT_WINDOW_SECONDS=60
 BUDGET_RATE_LIMIT_CLEANUP_INTERVAL_SECONDS=60
 BUDGET_RATE_LIMIT_REQUIRE_CLIENT_IP=true
+BUDGET_RATE_LIMIT_BACKEND=redis
+BUDGET_RATE_LIMIT_REDIS_URL=redis://127.0.0.1:6379/0
+BUDGET_RATE_LIMIT_REDIS_KEY_PREFIX=budget:rate_limit:
 ```
 
 Notes:
 - The limiter uses a fixed window; bursts near the window boundary can exceed the nominal rate.
 - If `require_client_ip` is enabled and the client IP cannot be determined, requests fail with 400.
+- `backend` should be `redis` in production; `in_memory` is only intended for local development/tests.
+
+### Session
+
+```toml
+[session]
+ttl_seconds = 2592000  # 30 days
+```
+
+Or with environment variables:
+```bash
+BUDGET_SESSION_TTL_SECONDS=2592000
+```
 
 #### Advanced Logging Configuration with RUST_LOG
 

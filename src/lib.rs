@@ -150,10 +150,19 @@ fn collect_base_paths(api_config: &config::ApiConfig) -> Vec<String> {
 
 fn stage_rate_limiter(rate_limit_config: config::RateLimitConfig) -> AdHoc {
     AdHoc::on_ignite("Rate Limiter", move |rocket| {
-        let limiter = Arc::new(RateLimiter::new(rate_limit_config.clone()));
-        limiter.clone().spawn_cleanup_task();
+        Box::pin(async move {
+            let limiter = match RateLimiter::new(rate_limit_config.clone()).await {
+                Ok(limiter) => Arc::new(limiter),
+                Err(err) => {
+                    eprintln!("Failed to initialize rate limiter: {}", err);
+                    std::process::exit(1);
+                }
+            };
 
-        Box::pin(async move { rocket.manage(limiter) })
+            limiter.clone().spawn_cleanup_task();
+
+            rocket.manage(limiter)
+        })
     })
 }
 
@@ -166,6 +175,7 @@ pub fn build_rocket(config: Config) -> Rocket<Build> {
     let base_paths = collect_base_paths(&config.api);
 
     let mut rocket = rocket::build()
+        .manage(config.clone())
         .attach(stage_rate_limiter(config.rate_limit.clone()))
         .attach(cors)
         .attach(RequestLogger) // Attach request/response logging middleware

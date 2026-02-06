@@ -145,7 +145,10 @@ impl<'r> Responder<'r, 'static> for AppError {
         );
 
         let status = Status::from(&self);
-        let error_message = self.to_string();
+        let error_message = match &self {
+            AppError::ValidationError(_) => "Invalid request".to_string(),
+            _ => self.to_string(),
+        };
         let error_response = ErrorResponse {
             message: error_message.clone(),
             request_id: request_id.clone(),
