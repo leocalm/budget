@@ -117,6 +117,7 @@ Benefits:
 
 - Cookie-based authentication implemented in `src/auth.rs` via the `CurrentUser` request guard (`FromRequest`).
 - The guard reads the private (encrypted) `user` cookie. Expected format: `<uuid>:<username>`. Returns `401 Unauthorized` if the cookie is missing or unparseable.
+- The auth cookie is `HttpOnly` always. In `release` profile it is also `Secure` and `SameSite=Strict`. In non-release profiles it uses `SameSite=Lax`.
 - `CurrentUser.id` is threaded into every repository call to scope queries to the authenticated user.
 
 ### Domain Models

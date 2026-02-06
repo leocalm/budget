@@ -152,6 +152,16 @@ Notes:
 - An empty `allowed_origins` list disables cross-origin requests by default.
 - Do not combine wildcard origins (`*`) with `allow_credentials = true` (this will panic at startup).
 
+### Authentication Cookies
+
+The private `user` cookie is configured with:
+
+- `HttpOnly` always
+- `SameSite=Lax` in non-release profiles
+- `SameSite=Strict` and `Secure` in `release` profile
+
+Set `ROCKET_PROFILE=release` in production to enable the stricter settings.
+
 ### Rate Limiting
 
 ```toml

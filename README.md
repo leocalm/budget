@@ -45,6 +45,19 @@ All API endpoints are versioned and mounted under `/api/v1` by default. The curr
 
 For complete API lifecycle information including deprecation policies and migration guides, see [API_LIFECYCLE.md](API_LIFECYCLE.md).
 
+### Security Defaults
+
+- CORS is denied by default (empty `allowed_origins`). Set `BUDGET_CORS__ALLOWED_ORIGINS` to your frontend origin(s).
+- Auth cookies are `HttpOnly` always. In `release` profile they are also `Secure` and `SameSite=Strict`. In non-release profiles they use `SameSite=Lax`.
+
+### Docker Compose (Development)
+
+The `docker-compose.yaml` file only provisions PostgreSQL and requires explicit environment variables:
+
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `POSTGRES_DB`
+
 ## Database schema & migrations
 
 Migrations are managed by [sqlx-cli](https://github.com/jmoiron/sqlx) and live under `migrations/`.
