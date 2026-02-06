@@ -102,7 +102,7 @@ pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
 mod tests {
     use crate::{Config, build_rocket};
     use chrono::{Datelike, Duration, NaiveDate, Utc};
-    use rocket::http::{ContentType, Cookie, Status};
+    use rocket::http::{ContentType, Status};
     use rocket::local::asynchronous::Client;
     use serde_json::Value;
     use uuid::Uuid;
@@ -112,7 +112,7 @@ mod tests {
         let payload = serde_json::json!({
             "name": format!("Test User {}", unique),
             "email": format!("test.user.{}@example.com", unique),
-            "password": "password123"
+            "password": "CorrectHorseBatteryStaple!2026"
         });
 
         let response = client
@@ -128,8 +128,19 @@ mod tests {
         let user_id = user_json["id"].as_str().expect("user id").to_string();
         let user_email = user_json["email"].as_str().expect("user email").to_string();
 
-        let cookie_value = format!("{}:{}", user_id, user_email);
-        client.cookies().add_private(Cookie::build(("user", cookie_value)).path("/").build());
+        let login_payload = serde_json::json!({
+            "email": user_email,
+            "password": "CorrectHorseBatteryStaple!2026"
+        });
+
+        let login_response = client
+            .post("/api/v1/users/login")
+            .header(ContentType::JSON)
+            .body(login_payload.to_string())
+            .dispatch()
+            .await;
+
+        assert_eq!(login_response.status(), Status::Ok);
 
         (user_id, user_email)
     }

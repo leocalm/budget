@@ -31,6 +31,8 @@ pub enum AppError {
     UserNotFound,
     #[error("Unauthorized")]
     Unauthorized,
+    #[error("Forbidden")]
+    Forbidden,
     #[error("Invalid credentials")]
     InvalidCredentials,
     #[error("Internal server error")]
@@ -101,6 +103,7 @@ impl From<&AppError> for Status {
             AppError::PasswordHash { .. } => Status::InternalServerError,
             AppError::Db { .. } => Status::InternalServerError,
             AppError::Unauthorized => Status::Unauthorized,
+            AppError::Forbidden => Status::Forbidden,
             AppError::UserAlreadyExists(_) => Status::Conflict,
             AppError::BadRequest(_) => Status::BadRequest,
             AppError::NotFound(_) => Status::NotFound,
@@ -142,7 +145,10 @@ impl<'r> Responder<'r, 'static> for AppError {
         );
 
         let status = Status::from(&self);
-        let error_message = self.to_string();
+        let error_message = match &self {
+            AppError::ValidationError(_) => "Invalid request".to_string(),
+            _ => self.to_string(),
+        };
         let error_response = ErrorResponse {
             message: error_message.clone(),
             request_id: request_id.clone(),
@@ -179,6 +185,13 @@ impl OpenApiResponderInner for AppError {
             "401".to_string(),
             RefOr::Object(OpenApiResponse {
                 description: "Unauthorized".to_string(),
+                ..Default::default()
+            }),
+        );
+        responses.responses.insert(
+            "403".to_string(),
+            RefOr::Object(OpenApiResponse {
+                description: "Forbidden".to_string(),
                 ..Default::default()
             }),
         );

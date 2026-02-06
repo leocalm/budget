@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::auth::parse_user_cookie_value;
-use crate::config::RateLimitConfig;
+use crate::auth::parse_session_cookie_value;
+use crate::config::{RateLimitBackend, RateLimitConfig};
 use rocket::http::{Method, Status};
 use rocket::request::{FromRequest, Outcome, Request};
 use rocket_okapi::r#gen::OpenApiGenerator;
@@ -26,12 +26,29 @@ impl RateLimitBucket {
             Method::Get | Method::Head | Method::Options | Method::Trace | Method::Connect => RateLimitBucket::Read,
         }
     }
+
+    fn as_str(&self) -> &'static str {
+        match self {
+            RateLimitBucket::Read => "read",
+            RateLimitBucket::Mutation => "mutation",
+            RateLimitBucket::Auth => "auth",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum RateLimitIdentity {
     Ip(String),
     User(String),
+}
+
+impl RateLimitIdentity {
+    fn key(&self) -> String {
+        match self {
+            RateLimitIdentity::Ip(ip) => format!("ip:{}", ip),
+            RateLimitIdentity::User(user) => format!("user:{}", user),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -46,28 +63,55 @@ struct Counter {
     count: u32,
 }
 
-#[derive(Debug)]
 pub(crate) struct RateLimiter {
     config: RateLimitConfig,
     window: Duration,
     cleanup_interval: Duration,
-    counters: Mutex<HashMap<RateLimitKey, Counter>>,
+    backend: RateLimiterBackendImpl,
+}
+
+enum RateLimiterBackendImpl {
+    Redis {
+        manager: redis::aio::ConnectionManager,
+        key_prefix: String,
+    },
+    InMemory {
+        counters: Mutex<HashMap<RateLimitKey, Counter>>,
+    },
 }
 
 impl RateLimiter {
-    pub fn new(config: RateLimitConfig) -> Self {
+    pub async fn new(config: RateLimitConfig) -> Result<Self, redis::RedisError> {
         let window = Duration::from_secs(config.window_seconds.max(1));
         let cleanup_interval = Duration::from_secs(config.cleanup_interval_seconds.max(1));
 
-        Self {
+        let backend = match config.backend {
+            RateLimitBackend::Redis => {
+                let client = redis::Client::open(config.redis_url.as_str())?;
+                let mut manager = redis::aio::ConnectionManager::new(client).await?;
+                let _: () = redis::cmd("PING").query_async(&mut manager).await?;
+                RateLimiterBackendImpl::Redis {
+                    manager,
+                    key_prefix: config.redis_key_prefix.clone(),
+                }
+            }
+            RateLimitBackend::InMemory => RateLimiterBackendImpl::InMemory {
+                counters: Mutex::new(HashMap::new()),
+            },
+        };
+
+        Ok(Self {
             config,
             window,
             cleanup_interval,
-            counters: Mutex::new(HashMap::new()),
-        }
+            backend,
+        })
     }
 
     pub fn spawn_cleanup_task(self: Arc<Self>) {
+        if !matches!(self.backend, RateLimiterBackendImpl::InMemory { .. }) {
+            return;
+        }
         let cleanup_interval = self.cleanup_interval;
         tokio::spawn(async move {
             let mut ticker = tokio::time::interval(cleanup_interval);
@@ -75,8 +119,10 @@ impl RateLimiter {
                 ticker.tick().await;
                 let now = Instant::now();
                 let window = self.window;
-                let mut counters = self.counters.lock().await;
-                counters.retain(|_, counter| now.duration_since(counter.window_start) < window);
+                if let RateLimiterBackendImpl::InMemory { counters } = &self.backend {
+                    let mut counters = counters.lock().await;
+                    counters.retain(|_, counter| now.duration_since(counter.window_start) < window);
+                }
             }
         });
     }
@@ -86,10 +132,30 @@ impl RateLimiter {
             return RateLimitDecision::Allow;
         }
 
+        match &self.backend {
+            RateLimiterBackendImpl::Redis { manager, key_prefix } => self.check_redis(manager, key_prefix, identities, bucket).await,
+            RateLimiterBackendImpl::InMemory { counters } => self.check_in_memory(counters, identities, bucket).await,
+        }
+    }
+
+    fn limit_for_bucket(&self, bucket: RateLimitBucket) -> u32 {
+        match bucket {
+            RateLimitBucket::Read => self.config.read_limit,
+            RateLimitBucket::Mutation => self.config.mutation_limit,
+            RateLimitBucket::Auth => self.config.auth_limit,
+        }
+    }
+
+    async fn check_in_memory(
+        &self,
+        counters: &Mutex<HashMap<RateLimitKey, Counter>>,
+        identities: &[RateLimitIdentity],
+        bucket: RateLimitBucket,
+    ) -> RateLimitDecision {
         // NOTE: This is a fixed-window counter; bursts can exceed the limit near window boundaries.
         let limit = self.limit_for_bucket(bucket);
         let now = Instant::now();
-        let mut counters = self.counters.lock().await;
+        let mut counters = counters.lock().await;
         let mut retry_after: Option<Duration> = None;
 
         for identity in identities {
@@ -128,12 +194,75 @@ impl RateLimiter {
         RateLimitDecision::Allow
     }
 
-    fn limit_for_bucket(&self, bucket: RateLimitBucket) -> u32 {
-        match bucket {
-            RateLimitBucket::Read => self.config.read_limit,
-            RateLimitBucket::Mutation => self.config.mutation_limit,
-            RateLimitBucket::Auth => self.config.auth_limit,
+    async fn check_redis(
+        &self,
+        manager: &redis::aio::ConnectionManager,
+        key_prefix: &str,
+        identities: &[RateLimitIdentity],
+        bucket: RateLimitBucket,
+    ) -> RateLimitDecision {
+        let limit = self.limit_for_bucket(bucket);
+        let window_secs = self.window.as_secs().max(1);
+        let keys: Vec<String> = identities
+            .iter()
+            .map(|identity| format!("{}{}:{}", key_prefix, bucket.as_str(), identity.key()))
+            .collect();
+
+        let mut conn = manager.clone();
+
+        let counts: Vec<Option<u32>> = match redis::cmd("MGET").arg(&keys).query_async(&mut conn).await {
+            Ok(counts) => counts,
+            Err(err) => {
+                warn!(error = %err, "rate limiter redis lookup failed; allowing request");
+                return RateLimitDecision::Allow;
+            }
+        };
+
+        let mut retry_after: Option<Duration> = None;
+        for (idx, count_opt) in counts.iter().enumerate() {
+            let count = count_opt.unwrap_or(0);
+            if count >= limit {
+                let ttl_ms: i64 = match redis::cmd("PTTL").arg(&keys[idx]).query_async(&mut conn).await {
+                    Ok(ttl_ms) => ttl_ms,
+                    Err(err) => {
+                        warn!(error = %err, "rate limiter redis ttl lookup failed; allowing request");
+                        return RateLimitDecision::Allow;
+                    }
+                };
+
+                let ttl_secs = match ttl_ms {
+                    -1 => {
+                        warn!(
+                            key = %keys[idx],
+                            "rate limiter redis key has no expiry after EXPIRE NX; using window_secs as fallback"
+                        );
+                        window_secs
+                    }
+                    _ if ttl_ms <= 0 => window_secs,
+                    _ => (ttl_ms as u64).div_ceil(1000),
+                };
+
+                let ttl = Duration::from_secs(ttl_secs.max(1));
+                retry_after = Some(retry_after.map_or(ttl, |current| current.max(ttl)));
+            }
         }
+
+        if let Some(retry_after) = retry_after {
+            return RateLimitDecision::Limited { retry_after };
+        }
+
+        let mut pipe = redis::pipe();
+        for key in &keys {
+            pipe.cmd("INCR").arg(key).ignore();
+            pipe.cmd("EXPIRE").arg(key).arg(window_secs as usize).arg("NX").ignore();
+        }
+
+        if let Err(err) = pipe.query_async::<_, ()>(&mut conn).await {
+            warn!(error = %err, "rate limiter redis increment failed; allowing request");
+            return RateLimitDecision::Allow;
+        }
+
+        RateLimitDecision::Allow
     }
 }
 
@@ -269,8 +398,8 @@ async fn rate_limit_request(request: &Request<'_>, bucket: RateLimitBucket) -> O
 
 fn extract_user_id(request: &Request<'_>) -> Option<String> {
     let cookie = request.cookies().get_private("user")?;
-    let (id, _) = parse_user_cookie_value(cookie.value())?;
-    Some(id.to_string())
+    let (_, user_id) = parse_session_cookie_value(cookie.value())?;
+    Some(user_id.to_string())
 }
 
 fn too_many_requests_response() -> rocket_okapi::Result<Responses> {
@@ -293,6 +422,14 @@ mod tests {
     use rocket::local::asynchronous::Client;
     use rocket::{catchers, get, routes};
 
+    fn in_memory_config() -> RateLimitConfig {
+        RateLimitConfig {
+            backend: RateLimitBackend::InMemory,
+            redis_key_prefix: "test:rate_limit:".to_string(),
+            ..RateLimitConfig::default()
+        }
+    }
+
     #[get("/limited")]
     async fn limited(_rate_limit: RateLimit) -> Status {
         Status::Ok
@@ -300,14 +437,15 @@ mod tests {
 
     #[rocket::async_test]
     async fn rate_limiter_blocks_after_limit() {
-        let limiter = RateLimiter::new(RateLimitConfig {
-            read_limit: 2,
-            mutation_limit: 1,
-            auth_limit: 1,
-            window_seconds: 60,
-            cleanup_interval_seconds: 60,
-            require_client_ip: false,
-        });
+        let mut config = in_memory_config();
+        config.read_limit = 2;
+        config.mutation_limit = 1;
+        config.auth_limit = 1;
+        config.window_seconds = 60;
+        config.cleanup_interval_seconds = 60;
+        config.require_client_ip = false;
+
+        let limiter = RateLimiter::new(config).await.expect("rate limiter");
 
         let identities = vec![RateLimitIdentity::Ip("127.0.0.1".to_string())];
 
@@ -321,14 +459,15 @@ mod tests {
 
     #[rocket::async_test]
     async fn rate_limiter_resets_after_window() {
-        let limiter = RateLimiter::new(RateLimitConfig {
-            read_limit: 1,
-            mutation_limit: 1,
-            auth_limit: 1,
-            window_seconds: 1,
-            cleanup_interval_seconds: 60,
-            require_client_ip: false,
-        });
+        let mut config = in_memory_config();
+        config.read_limit = 1;
+        config.mutation_limit = 1;
+        config.auth_limit = 1;
+        config.window_seconds = 1;
+        config.cleanup_interval_seconds = 60;
+        config.require_client_ip = false;
+
+        let limiter = RateLimiter::new(config).await.expect("rate limiter");
 
         let identities = vec![RateLimitIdentity::Ip("127.0.0.1".to_string())];
         assert!(matches!(limiter.check(&identities, RateLimitBucket::Read).await, RateLimitDecision::Allow));
@@ -344,14 +483,15 @@ mod tests {
 
     #[rocket::async_test]
     async fn mutation_bucket_enforced() {
-        let limiter = RateLimiter::new(RateLimitConfig {
-            read_limit: 10,
-            mutation_limit: 1,
-            auth_limit: 1,
-            window_seconds: 60,
-            cleanup_interval_seconds: 60,
-            require_client_ip: false,
-        });
+        let mut config = in_memory_config();
+        config.read_limit = 10;
+        config.mutation_limit = 1;
+        config.auth_limit = 1;
+        config.window_seconds = 60;
+        config.cleanup_interval_seconds = 60;
+        config.require_client_ip = false;
+
+        let limiter = RateLimiter::new(config).await.expect("rate limiter");
 
         let identities = vec![RateLimitIdentity::Ip("127.0.0.1".to_string())];
 
@@ -364,14 +504,15 @@ mod tests {
 
     #[rocket::async_test]
     async fn rate_limiter_does_not_increment_when_limited() {
-        let limiter = RateLimiter::new(RateLimitConfig {
-            read_limit: 1,
-            mutation_limit: 1,
-            auth_limit: 1,
-            window_seconds: 60,
-            cleanup_interval_seconds: 60,
-            require_client_ip: false,
-        });
+        let mut config = in_memory_config();
+        config.read_limit = 1;
+        config.mutation_limit = 1;
+        config.auth_limit = 1;
+        config.window_seconds = 60;
+        config.cleanup_interval_seconds = 60;
+        config.require_client_ip = false;
+
+        let limiter = RateLimiter::new(config).await.expect("rate limiter");
 
         let ip = RateLimitIdentity::Ip("10.0.0.1".to_string());
         let user = RateLimitIdentity::User("user-1".to_string());
@@ -405,14 +546,15 @@ mod tests {
 
     #[rocket::async_test]
     async fn rate_limit_retry_after_header_is_set() {
-        let limiter = Arc::new(RateLimiter::new(RateLimitConfig {
-            read_limit: 0,
-            mutation_limit: 0,
-            auth_limit: 0,
-            window_seconds: 60,
-            cleanup_interval_seconds: 60,
-            require_client_ip: false,
-        }));
+        let mut config = in_memory_config();
+        config.read_limit = 0;
+        config.mutation_limit = 0;
+        config.auth_limit = 0;
+        config.window_seconds = 60;
+        config.cleanup_interval_seconds = 60;
+        config.require_client_ip = false;
+
+        let limiter = Arc::new(RateLimiter::new(config).await.expect("rate limiter"));
 
         let rocket = rocket::build()
             .manage(limiter)
@@ -430,8 +572,13 @@ mod tests {
     #[cfg(test)]
     impl RateLimiter {
         async fn count_for(&self, identity: RateLimitIdentity, bucket: RateLimitBucket) -> u32 {
-            let counters = self.counters.lock().await;
-            counters.get(&RateLimitKey { identity, bucket }).map(|counter| counter.count).unwrap_or(0)
+            match &self.backend {
+                RateLimiterBackendImpl::InMemory { counters } => {
+                    let counters = counters.lock().await;
+                    counters.get(&RateLimitKey { identity, bucket }).map(|counter| counter.count).unwrap_or(0)
+                }
+                RateLimiterBackendImpl::Redis { .. } => 0,
+            }
         }
     }
 }
