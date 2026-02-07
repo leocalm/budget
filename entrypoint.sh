@@ -7,7 +7,7 @@ echo "Waiting for PostgreSQL to be ready..."
 max_retries=30
 counter=0
 
-until pg_isready -d "$DATABASE_URL" 2>/dev/null || [ $counter -eq $max_retries ]; do
+until psql "$DATABASE_URL" -c "SELECT 1;" > /dev/null 2>&1 || [ $counter -eq $max_retries ]; do
   echo "PostgreSQL is unavailable - sleeping (attempt $counter/$max_retries)"
   sleep 2
   counter=$((counter + 1))
@@ -18,6 +18,7 @@ if [ $counter -eq $max_retries ]; then
   exit 1
 fi
 
-echo "PostgreSQL is up!"
+echo "PostgreSQL is up and accepting connections!"
+echo "Database URL: $DATABASE_URL"
 echo "Starting Budget API..."
 exec /app/budget
