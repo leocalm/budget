@@ -13,7 +13,6 @@ pub struct Config {
     pub rate_limit: RateLimitConfig,
     pub session: SessionConfig,
     pub api: ApiConfig,
-    pub cron: CronConfig,
     pub email: EmailConfig,
     pub password_reset: PasswordResetConfig,
 }
@@ -78,11 +77,6 @@ pub struct ApiConfig {
     pub base_path: String,
     pub additional_base_paths: Vec<String>,
     pub expose_docs: bool,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct CronConfig {
-    pub auth_token: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -169,12 +163,6 @@ impl Default for ApiConfig {
             additional_base_paths: Vec::new(),
             expose_docs: false,
         }
-    }
-}
-
-impl Default for CronConfig {
-    fn default() -> Self {
-        Self { auth_token: "".to_string() }
     }
 }
 
