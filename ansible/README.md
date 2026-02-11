@@ -34,12 +34,13 @@ Terraform should provision infrastructure only. Use Ansible for day-2 operations
 6. Use `ansible-image-vars.yml` from that artifact to update:
    - `piggypulse_api_image`
    - `piggypulse_cron_image`
-7. If `piggypulse_deploy_mode: repo` and the repo is private, set these in Vault:
+7. Keep `piggypulse_budget_image_platform: linux/amd64` for Hetzner x86_64 servers.
+8. If `piggypulse_deploy_mode: repo` and the repo is private, set these in Vault:
    - `vault_piggypulse_repo_username` (your GitHub username)
    - `vault_piggypulse_repo_token`
    and keep `piggypulse_repo_url` as HTTPS.
-8. Set `piggypulse_repo_requires_auth: true` for private repositories (repo mode only).
-9. If GHCR packages are private, set:
+9. Set `piggypulse_repo_requires_auth: true` for private repositories (repo mode only).
+10. If GHCR packages are private, set:
    - `piggypulse_ghcr_requires_auth: true`
    - `vault_piggypulse_ghcr_username`
    - `vault_piggypulse_ghcr_token` (`read:packages` scope)

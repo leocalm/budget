@@ -49,6 +49,7 @@ services:
 
   budget:
     image: ${BUDGET_API_IMAGE:?BUDGET_API_IMAGE is required}
+    platform: ${BUDGET_IMAGE_PLATFORM:-linux/amd64}
     restart: unless-stopped
     depends_on:
       db:
@@ -68,15 +69,15 @@ services:
       - |
         max_retries=30
         retry_count=0
-        while [ "$retry_count" -lt "$max_retries" ]; do
+        while [ "$$retry_count" -lt "$$max_retries" ]; do
           if sqlx migrate run --source /app/migrations 2>&1; then
             break
           fi
-          retry_count=$((retry_count + 1))
-          if [ "$retry_count" -lt "$max_retries" ]; then
+          retry_count=$$((retry_count + 1))
+          if [ "$$retry_count" -lt "$$max_retries" ]; then
             sleep 2
           else
-            echo "ERROR: Database migrations failed after $max_retries attempts"
+            echo "ERROR: Database migrations failed after $$max_retries attempts"
             exit 1
           fi
         done
@@ -130,6 +131,7 @@ services:
 
   cron:
     image: ${BUDGET_CRON_IMAGE:?BUDGET_CRON_IMAGE is required}
+    platform: ${BUDGET_IMAGE_PLATFORM:-linux/amd64}
     restart: unless-stopped
     depends_on:
       budget:
