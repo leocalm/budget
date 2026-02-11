@@ -141,15 +141,18 @@ Automated deploy workflow: `.github/workflows/deploy-production.yml`.
 
 - Auto trigger: after successful `Publish Container Images` run on `main`
 - Manual trigger: `workflow_dispatch` with explicit image refs
-- Runner requirement: self-hosted Linux runner with network access to your production host (`10.66.0.1` for VPN-only mode)
+- Runner requirement: GitHub-hosted `ubuntu-latest` runner
+- Connectivity model: workflow establishes WireGuard tunnel, then deploys to `10.66.0.1`
 
 Required repository/environment secrets:
 
 - `ANSIBLE_VAULT_PASSWORD`
+- `PROD_WIREGUARD_CONFIG`
+  - full WireGuard client config content for `wg0`
 - `PROD_SSH_KNOWN_HOSTS`
   - build it from verified host keys (example: `ssh-keyscan -H <host-or-vpn-ip>`)
 
 Optional secret:
 
 - `PROD_SSH_PRIVATE_KEY`
-  - only needed if the self-hosted runner does not already have the SSH key referenced by inventory
+  - required unless your playbook uses another auth mechanism
