@@ -1,0 +1,311 @@
+version: 2.1
+
+# Reusable executors
+executors:
+  docker-builder:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: small
+    environment:
+      DOCKER_BUILDKIT: 1
+
+# Reusable commands
+commands:
+  install_buildx:
+    steps:
+      - run:
+          name: Install Docker Buildx
+          command: |
+            mkdir -p ~/.docker/cli-plugins
+            curl -sSL "https://github.com/docker/buildx/releases/download/v0.12.0/buildx-v0.12.0.linux-amd64" -o ~/.docker/cli-plugins/docker-buildx
+            chmod +x ~/.docker/cli-plugins/docker-buildx
+            docker buildx version
+
+  install_cosign:
+    steps:
+      - run:
+          name: Install Cosign
+          command: |
+            curl -sSL "https://github.com/sigstore/cosign/releases/download/v2.2.2/cosign-linux-amd64" -o /tmp/cosign
+            sudo install /tmp/cosign /usr/local/bin/cosign
+            cosign version
+
+# Jobs
+jobs:
+  publish_api:
+    executor: docker-builder
+    steps:
+      - checkout
+
+      - install_buildx
+      - install_cosign
+
+      - run:
+          name: Normalize image namespace
+          command: |
+            owner_lc="$(echo '$CIRCLE_PROJECT_USERNAME' | tr '[:upper:]' '[:lower:]')"
+            image_name="ghcr.io/${owner_lc}/budget-api"
+            echo "export IMAGE_NAME=${image_name}" >> $BASH_ENV
+            echo "Image: ${image_name}"
+
+      - run:
+          name: Log in to GHCR
+          command: |
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+
+      - run:
+          name: Set up Docker Buildx builder
+          command: |
+            docker buildx create --use --name circleci-builder || true
+            docker buildx inspect --bootstrap
+
+      - restore_cache:
+          keys:
+            - docker-cache-api-{{ .Branch }}
+            - docker-cache-api-
+
+      - run:
+          name: Build and push API image
+          command: |
+            source $BASH_ENV
+            docker buildx build \
+              --platform linux/amd64 \
+              --file ./Dockerfile \
+              --tag "${IMAGE_NAME}:sha-${CIRCLE_SHA1}" \
+              --tag "${IMAGE_NAME}:latest" \
+              --cache-from type=local,src=/tmp/docker-cache \
+              --cache-to type=local,dest=/tmp/docker-cache-new,mode=max \
+              --push \
+              .
+            
+            # Get digest
+            DIGEST=$(docker buildx imagetools inspect "${IMAGE_NAME}:sha-${CIRCLE_SHA1}" --format '{{json .Manifest}}' | jq -r '.digest')
+            echo "export IMAGE_DIGEST=${DIGEST}" >> $BASH_ENV
+            echo "API Image Digest: ${DIGEST}"
+
+      - save_cache:
+          key: docker-cache-api-{{ .Branch }}-{{ epoch }}
+          paths:
+            - /tmp/docker-cache-new
+
+      - run:
+          name: Sign API image with Cosign
+          command: |
+            source $BASH_ENV
+            export COSIGN_YES=true
+            cosign sign "${IMAGE_NAME}@${IMAGE_DIGEST}"
+
+      - run:
+          name: Save image reference
+          command: |
+            source $BASH_ENV
+            mkdir -p /tmp/workspace
+            echo "${IMAGE_NAME}:sha-${CIRCLE_SHA1}" > /tmp/workspace/api_image_ref.txt
+            cat /tmp/workspace/api_image_ref.txt
+
+      - persist_to_workspace:
+          root: /tmp/workspace
+          paths:
+            - api_image_ref.txt
+
+  publish_cron:
+    executor: docker-builder
+    steps:
+      - checkout
+
+      - install_buildx
+      - install_cosign
+
+      - run:
+          name: Normalize image namespace
+          command: |
+            owner_lc="$(echo '$CIRCLE_PROJECT_USERNAME' | tr '[:upper:]' '[:lower:]')"
+            image_name="ghcr.io/${owner_lc}/budget-cron"
+            echo "export IMAGE_NAME=${image_name}" >> $BASH_ENV
+            echo "Image: ${image_name}"
+
+      - run:
+          name: Log in to GHCR
+          command: |
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+
+      - run:
+          name: Set up Docker Buildx builder
+          command: |
+            docker buildx create --use --name circleci-builder || true
+            docker buildx inspect --bootstrap
+
+      - restore_cache:
+          keys:
+            - docker-cache-cron-{{ .Branch }}
+            - docker-cache-cron-
+
+      - run:
+          name: Build and push Cron image
+          command: |
+            source $BASH_ENV
+            docker buildx build \
+              --platform linux/amd64 \
+              --file ./Dockerfile.cron \
+              --tag "${IMAGE_NAME}:sha-${CIRCLE_SHA1}" \
+              --tag "${IMAGE_NAME}:latest" \
+              --cache-from type=local,src=/tmp/docker-cache \
+              --cache-to type=local,dest=/tmp/docker-cache-new,mode=max \
+              --push \
+              .
+            
+            # Get digest
+            DIGEST=$(docker buildx imagetools inspect "${IMAGE_NAME}:sha-${CIRCLE_SHA1}" --format '{{json .Manifest}}' | jq -r '.digest')
+            echo "export IMAGE_DIGEST=${DIGEST}" >> $BASH_ENV
+            echo "Cron Image Digest: ${DIGEST}"
+
+      - save_cache:
+          key: docker-cache-cron-{{ .Branch }}-{{ epoch }}
+          paths:
+            - /tmp/docker-cache-new
+
+      - run:
+          name: Sign Cron image with Cosign
+          command: |
+            source $BASH_ENV
+            export COSIGN_YES=true
+            cosign sign "${IMAGE_NAME}@${IMAGE_DIGEST}"
+
+      - run:
+          name: Save image reference
+          command: |
+            source $BASH_ENV
+            mkdir -p /tmp/workspace
+            echo "${IMAGE_NAME}:sha-${CIRCLE_SHA1}" > /tmp/workspace/cron_image_ref.txt
+            cat /tmp/workspace/cron_image_ref.txt
+
+      - persist_to_workspace:
+          root: /tmp/workspace
+          paths:
+            - cron_image_ref.txt
+
+  deploy:
+    executor: docker-builder
+    steps:
+      - checkout
+
+      - attach_workspace:
+          at: /tmp/workspace
+
+      - run:
+          name: Load image references
+          command: |
+            export API_IMAGE_REF=$(cat /tmp/workspace/api_image_ref.txt)
+            export CRON_IMAGE_REF=$(cat /tmp/workspace/cron_image_ref.txt)
+            echo "export API_IMAGE_REF=${API_IMAGE_REF}" >> $BASH_ENV
+            echo "export CRON_IMAGE_REF=${CRON_IMAGE_REF}" >> $BASH_ENV
+            echo "API Image: ${API_IMAGE_REF}"
+            echo "Cron Image: ${CRON_IMAGE_REF}"
+
+      - run:
+          name: Validate image refs and secrets
+          command: |
+            source $BASH_ENV
+            set -euo pipefail
+            echo "Validating image references..."
+            test -n "${API_IMAGE_REF}"
+            test -n "${CRON_IMAGE_REF}"
+            case "${API_IMAGE_REF}" in
+              ghcr.io/*) ;;
+              *) echo "Invalid API image ref: ${API_IMAGE_REF}" >&2; exit 1 ;;
+            esac
+            case "${CRON_IMAGE_REF}" in
+              ghcr.io/*) ;;
+              *) echo "Invalid Cron image ref: ${CRON_IMAGE_REF}" >&2; exit 1 ;;
+            esac
+            echo "Validating required secrets..."
+            test -n "$ANSIBLE_VAULT_PASSWORD"
+            test -n "$PROD_WIREGUARD_CONFIG"
+            test -n "$PROD_SSH_KNOWN_HOSTS"
+            test -n "$PROD_SSH_PRIVATE_KEY_B64"
+            echo "All validations passed!"
+
+      - run:
+          name: Install Ansible and WireGuard
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y ansible wireguard-tools
+            ansible --version
+
+      - run:
+          name: Configure and start WireGuard VPN
+          command: |
+            sudo install -d -m 0700 /etc/wireguard
+            printf '%s\n' "$PROD_WIREGUARD_CONFIG" | sudo tee /etc/wireguard/wg0.conf > /dev/null
+            sudo chmod 600 /etc/wireguard/wg0.conf
+            sudo wg-quick up wg0
+            sudo wg show
+
+      - run:
+          name: Verify VPN connectivity
+          command: |
+            ping -c 3 10.66.0.1
+
+      - run:
+          name: Prepare SSH configuration
+          command: |
+            mkdir -p ~/.ssh
+            chmod 700 ~/.ssh
+            printf '%s\n' "$PROD_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+            chmod 644 ~/.ssh/known_hosts
+            printf '%s' "$PROD_SSH_PRIVATE_KEY_B64" | tr -d '[:space:]' | base64 -d > ~/.ssh/id_ed25519
+            chmod 600 ~/.ssh/id_ed25519
+            ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+            echo "SSH configuration complete"
+
+      - run:
+          name: Write Ansible vault password
+          command: |
+            printf '%s' "$ANSIBLE_VAULT_PASSWORD" > .vault_pass
+            chmod 600 .vault_pass
+
+      - run:
+          name: Run Ansible deployment
+          command: |
+            source $BASH_ENV
+            export ANSIBLE_CONFIG=ansible/ansible.cfg
+            ansible-playbook ansible/site.yml \
+              --vault-password-file .vault_pass \
+              --extra-vars "piggypulse_api_image=${API_IMAGE_REF}" \
+              --extra-vars "piggypulse_cron_image=${CRON_IMAGE_REF}"
+
+      - run:
+          name: Cleanup sensitive files
+          when: always
+          command: |
+            rm -f .vault_pass
+            rm -f ~/.ssh/id_ed25519
+            sudo wg-quick down wg0 || true
+            sudo rm -f /etc/wireguard/wg0.conf
+
+# Workflows
+workflows:
+  version: 2
+
+  build-and-deploy:
+    jobs:
+      - publish_api:
+          context: production  # Use CircleCI context for secrets
+          filters:
+            branches:
+              only: main
+
+      - publish_cron:
+          context: production
+          filters:
+            branches:
+              only: main
+
+      - deploy:
+          context: production
+          requires:
+            - publish_api
+            - publish_cron
+          filters:
+            branches:
+              only: main
