@@ -6,6 +6,34 @@ use rocket::figment::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct TwoFactorConfig {
+    /// Hex-encoded 32-byte encryption key for TOTP secrets (generate with: openssl rand -hex 32)
+    #[serde(default = "default_encryption_key")]
+    pub encryption_key: String,
+    /// Issuer name shown in authenticator apps (e.g., "PiggyPulse")
+    #[serde(default = "default_issuer_name")]
+    pub issuer_name: String,
+    /// Frontend URL for emergency 2FA disable confirmation
+    #[serde(default = "default_emergency_disable_url")]
+    pub frontend_emergency_disable_url: String,
+}
+
+fn default_encryption_key() -> String {
+    // WARNING: This is a placeholder key for development only
+    // Generate a secure key with: openssl rand -hex 32
+    // Set BUDGET_TWO_FACTOR__ENCRYPTION_KEY environment variable in production
+    "0000000000000000000000000000000000000000000000000000000000000000".to_string()
+}
+
+fn default_issuer_name() -> String {
+    "PiggyPulse".to_string()
+}
+
+fn default_emergency_disable_url() -> String {
+    "http://localhost:5173/auth/emergency-2fa-disable".to_string()
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct Config {
     pub database: DatabaseConfig,
     pub server: ServerConfig,
@@ -16,6 +44,7 @@ pub struct Config {
     pub api: ApiConfig,
     pub email: EmailConfig,
     pub password_reset: PasswordResetConfig,
+    pub two_factor: TwoFactorConfig,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -190,6 +219,7 @@ impl Default for PasswordResetConfig {
         }
     }
 }
+
 
 impl Config {
     /// Load configuration from multiple sources in priority order:

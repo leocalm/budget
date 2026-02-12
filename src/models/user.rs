@@ -36,6 +36,14 @@ pub struct UserRequest {
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
+    /// Optional two-factor authentication code (6 digits or backup code)
+    pub two_factor_code: Option<String>,
+}
+
+#[derive(Serialize, Debug, JsonSchema)]
+pub struct TwoFactorRequiredResponse {
+    /// Indicates that a 2FA code is required to complete login
+    pub two_factor_required: bool,
 }
 
 impl From<&User> for UserResponse {
