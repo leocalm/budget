@@ -49,21 +49,29 @@ jobs:
               .
 
   check-test:
-    machine:
-      image: ubuntu-2204:current
+    docker:
+      - image: cimg/rust:stable
     steps:
       - checkout
 
-      - run:
-          name: Check Style
-          command: |
-            cargo fmt --check
-            cargo clippy
+      - restore_cache:
+          keys:
+            - cargo-deps-{{ checksum "Cargo.lock" }}
+            - cargo-deps-
 
       - run:
-          name: Run Tests
+          name: Check formatting, lint and test
           command: |
-            cargo test
+            cargo fmt -- --check
+            cargo clippy -- -D warnings
+            cargo test --all
+
+      - save_cache:
+          paths:
+            - ~/.cargo/registry
+            - ~/.cargo/git
+            - target
+          key: cargo-deps-{{ checksum "Cargo.lock" }}
 
 workflows:
   build:
