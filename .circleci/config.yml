@@ -80,7 +80,4 @@ workflows:
 
   check-and-test:
     jobs:
-      - check-test:
-          filters:
-            ignore:
-              - main
+      - check-test
