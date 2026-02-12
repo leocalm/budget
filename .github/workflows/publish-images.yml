@@ -19,8 +19,6 @@ jobs:
   publish_api:
     name: Build and publish API image
     runs-on: ubuntu-latest
-    outputs:
-      image_ref: ${{ steps.export.outputs.image_ref }}
 
     steps:
       - name: Checkout
@@ -75,17 +73,9 @@ jobs:
         run: |
           cosign sign "${{ steps.prep.outputs.image_name }}@${{ steps.build.outputs.digest }}"
 
-      - name: Export API image ref
-        id: export
-        run: |
-          set -euo pipefail
-          echo "image_ref=${{ steps.prep.outputs.image_name }}@${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
-
   publish_cron:
     name: Build and publish Cron image
     runs-on: ubuntu-latest
-    outputs:
-      image_ref: ${{ steps.export.outputs.image_ref }}
 
     steps:
       - name: Checkout
@@ -140,12 +130,6 @@ jobs:
         run: |
           cosign sign "${{ steps.prep.outputs.image_name }}@${{ steps.build.outputs.digest }}"
 
-      - name: Export Cron image ref
-        id: export
-        run: |
-          set -euo pipefail
-          echo "image_ref=${{ steps.prep.outputs.image_name }}@${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
-
   deploy:
     name: Deploy to production via Ansible
     runs-on: ubuntu-latest
@@ -158,10 +142,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Compute deploy image refs for this commit
+        run: |
+          set -euo pipefail
+          owner_lc="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          api_image_ref="ghcr.io/${owner_lc}/budget-api:sha-${GITHUB_SHA}"
+          cron_image_ref="ghcr.io/${owner_lc}/budget-cron:sha-${GITHUB_SHA}"
+          printf 'API_IMAGE_REF=%s\n' "${api_image_ref}" >> "${GITHUB_ENV}"
+          printf 'CRON_IMAGE_REF=%s\n' "${cron_image_ref}" >> "${GITHUB_ENV}"
+
       - name: Validate image refs and required secrets
-        env:
-          API_IMAGE_REF: ${{ needs.publish_api.outputs.image_ref }}
-          CRON_IMAGE_REF: ${{ needs.publish_cron.outputs.image_ref }}
         run: |
           set -euo pipefail
           echo "Resolved publish outputs:"
@@ -217,8 +207,6 @@ jobs:
       - name: Run Ansible deploy
         env:
           ANSIBLE_CONFIG: ansible/ansible.cfg
-          API_IMAGE_REF: ${{ needs.publish_api.outputs.image_ref }}
-          CRON_IMAGE_REF: ${{ needs.publish_cron.outputs.image_ref }}
         run: |
           ansible-playbook ansible/site.yml \
             --vault-password-file .vault_pass \
@@ -230,8 +218,8 @@ jobs:
           {
             echo "## Published and Deployed Images"
             echo
-            echo "- API: \\`${{ needs.publish_api.outputs.image_ref }}\\`"
-            echo "- Cron: \\`${{ needs.publish_cron.outputs.image_ref }}\\`"
+            echo "- API: \\`${API_IMAGE_REF}\\`"
+            echo "- Cron: \\`${CRON_IMAGE_REF}\\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Cleanup sensitive temp files
