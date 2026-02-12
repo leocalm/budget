@@ -3,7 +3,6 @@ kind: pipeline
 type: docker
 name: test
 
-# Run tests on all branches
 steps:
   - name: test
     image: rust:1.93
@@ -42,7 +41,6 @@ kind: pipeline
 type: docker
 name: build-and-deploy
 
-# Only run on main branch
 trigger:
   branch:
     - main
@@ -94,13 +92,15 @@ steps:
           .
 
   - name: deploy
-    image: docker:cli
+    image: docker/compose:latest  # Changed to compose image
     volumes:
       - name: dockersock
         path: /var/run/docker.sock
+      - name: app-dir
+        path: /app
     commands:
       - echo "🚀 Starting deployment..."
-      - cd /opt/piggypulse/budget
+      - cd /app/budget
       - docker compose pull budget cron
       - docker compose up -d budget cron
       - docker image prune -af
@@ -128,3 +128,6 @@ volumes:
   - name: dockersock
     host:
       path: /var/run/docker.sock
+  - name: app-dir
+    host:
+      path: /opt/piggypulse
