@@ -39,4 +39,5 @@
 
 drone.your-domain.com {
     reverse_proxy drone-server:80
+    tls internal
 }
