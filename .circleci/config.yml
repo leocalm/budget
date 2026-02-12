@@ -1,19 +1,24 @@
 version: 2.1
 
 jobs:
-  deploy:
+  build_api:
     machine:
       image: ubuntu-2204:current
     steps:
       - checkout
 
-      # Build in CircleCI (fast servers)
       - run:
           name: Build and push API
           command: |
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
             docker build -t ghcr.io/leocalm/piggypulse-api:latest .
             docker push ghcr.io/leocalm/piggypulse-api:latest
+
+  build_cron:
+    machine:
+      image: ubuntu-2204:current
+    steps:
+      - checkout
 
       - run:
           name: Build and push Cron
@@ -22,38 +27,47 @@ jobs:
             docker build -f Dockerfile.cron -t ghcr.io/leocalm/piggypulse-cron:latest .
             docker push ghcr.io/leocalm/piggypulse-cron:latest
 
-      # Deploy to Hetzner (pull pre-built image)
+  deploy:
+    machine:
+      image: ubuntu-2204:current
+    steps:
       - run:
-          name: Deploy
+          name: Setup SSH
           command: |
-            ssh $HETZNER_USER@$HETZNER_HOST \<< 'ENDSSH'
-              cd /opt/piggypulse/budget
-              docker compose pull
-              docker compose up -d
-            ENDSSH
+            mkdir -p ~/.ssh
+            echo "$HETZNER_SSH_KEY" > ~/.ssh/id_ed25519
+            chmod 600 ~/.ssh/id_ed25519
+            echo "$HETZNER_HOST_KEY" >> ~/.ssh/known_hosts
 
-#      - run:
-#          name: Deploy to Hetzner
-#          command: |
-#            # Add SSH key
-#            mkdir -p ~/.ssh
-#            echo "$HETZNER_SSH_KEY" > ~/.ssh/id_ed25519
-#            chmod 600 ~/.ssh/id_ed25519
-#            echo "$HETZNER_HOST_KEY" >> ~/.ssh/known_hosts
-#
-#            # Deploy via SSH
-#            ssh -i ~/.ssh/id_ed25519 $HETZNER_USER@$HETZNER_HOST << 'ENDSSH'
-#              cd /opt/piggypulse/budget#
-#              git pull origin main
-#              docker compose pull
-#              docker compose up -d --build --remove-orphans
-#              docker system prune -af
-#            ENDSSH
+      - run:
+          name: Deploy to Hetzner
+          command: |
+            ssh -i ~/.ssh/id_ed25519 $HETZNER_USER@$HETZNER_HOST '
+              cd /opt/piggypulse/budget
+              echo "🐋 Pulling latest images..."
+              docker compose pull
+              echo "🚀 Starting services..."
+              docker compose up -d
+              echo "✅ Deploy complete!"
+            '
 
 workflows:
-  deploy:
+  build_and_deploy:
     jobs:
+      - build_api:
+          filters:
+            branches:
+              only: main
+
+      - build_cron:
+          filters:
+            branches:
+              only: main
+
       - deploy:
+          requires:
+            - build_api
+            - build_cron
           filters:
             branches:
               only: main
