@@ -38,7 +38,8 @@
     }
 }
 
-drone.your-domain.com {
+drone.piggy-pulse.com {
     reverse_proxy drone-server:80
     tls internal
 }
+
