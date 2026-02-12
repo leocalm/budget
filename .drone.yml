@@ -6,7 +6,7 @@ name: test
 # Run tests on all branches
 steps:
   - name: test
-    image: rust:1.75
+    image: rust:1.93
     volumes:
       - name: cargo-cache
         path: /usr/local/cargo
