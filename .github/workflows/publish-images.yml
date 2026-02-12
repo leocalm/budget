@@ -14,7 +14,7 @@ permissions:
   id-token: write
 
 jobs:
-  publish-api:
+  publish_api:
     name: Build and publish API image
     runs-on: ubuntu-latest
     outputs:
@@ -78,7 +78,7 @@ jobs:
         run: |
           echo "image_ref=${{ steps.prep.outputs.image_name }}@${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
 
-  publish-cron:
+  publish_cron:
     name: Build and publish Cron image
     runs-on: ubuntu-latest
     outputs:
@@ -146,14 +146,20 @@ jobs:
     name: Publish deploy digest manifest
     runs-on: ubuntu-latest
     needs:
-      - publish-api
-      - publish-cron
+      - publish_api
+      - publish_cron
 
     steps:
+      - name: Debug publish outputs
+        run: |
+          echo "needs context: ${{ toJson(needs) }}"
+          echo "api image_ref: '${{ needs.publish_api.outputs.image_ref }}'"
+          echo "cron image_ref: '${{ needs.publish_cron.outputs.image_ref }}'"
+
       - name: Create deploy digest manifest
         env:
-          API_IMAGE_REF: ${{ needs['publish-api'].outputs.image_ref }}
-          CRON_IMAGE_REF: ${{ needs['publish-cron'].outputs.image_ref }}
+          API_IMAGE_REF: ${{ needs.publish_api.outputs.image_ref }}
+          CRON_IMAGE_REF: ${{ needs.publish_cron.outputs.image_ref }}
         run: |
           set -euo pipefail
           test -n "${API_IMAGE_REF}"
@@ -176,8 +182,8 @@ jobs:
           {
             echo "## Published Images"
             echo
-            echo "- API: \\`${{ needs['publish-api'].outputs.image_ref }}\\`"
-            echo "- Cron: \\`${{ needs['publish-cron'].outputs.image_ref }}\\`"
+            echo "- API: \\`${{ needs.publish_api.outputs.image_ref }}\\`"
+            echo "- Cron: \\`${{ needs.publish_cron.outputs.image_ref }}\\`"
             echo
             echo "Use these in Ansible:"
             echo "- \\`piggypulse_api_image\\`"
