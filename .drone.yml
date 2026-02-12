@@ -101,4 +101,25 @@ steps:
       - docker image prune -af
       - echo "✅ Deployed version ${DRONE_COMMIT_SHA:0:7}"
 
-  - name:​​​​​​​​​​​​​​​​
+  - name: notify-success
+    image: alpine:latest
+    when:
+      status:
+        - success
+    commands:
+      - echo "✅ Build ${DRONE_BUILD_NUMBER} completed successfully!"
+      - echo "📦 Version ${DRONE_COMMIT_SHA:0:7} deployed to production"
+      
+  - name: notify-failure
+    image: alpine:latest
+    when:
+      status:
+        - failure
+    commands:
+      - echo "❌ Build ${DRONE_BUILD_NUMBER} failed!"
+      - echo "Commit ${DRONE_COMMIT_SHA:0:7} was not deployed"
+
+volumes:
+  - name: dockersock
+    host:
+      path: /var/run/docker.sock
