@@ -26,9 +26,7 @@ services:
 
   # Budget API application
   budget:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/leocalm/budget:latest
     restart: unless-stopped
     depends_on:
       db:
@@ -98,9 +96,7 @@ services:
 
   # Cron worker for automatic period generation
   cron:
-    build:
-      context: .
-      dockerfile: Dockerfile.cron
+    image: ghcr.io/leocalm/budget:latest
     restart: unless-stopped
     depends_on:
       budget:
