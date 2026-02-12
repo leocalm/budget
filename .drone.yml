@@ -1,0 +1,121 @@
+---
+kind: pipeline
+type: docker
+name: test
+
+# Run tests on all branches
+steps:
+  - name: test
+    image: rust:1.75
+    volumes:
+      - name: cargo-cache
+        path: /usr/local/cargo
+    commands:
+      - cargo fmt -- --check
+      - cargo clippy -- -D warnings
+      - cargo test --all
+
+volumes:
+  - name: cargo-cache
+    host:
+      path: /tmp/drone-cargo-cache
+
+---
+kind: pipeline
+type: docker
+name: build-and-deploy
+
+# Only run on main branch
+trigger:
+  branch:
+    - main
+  event:
+    - push
+
+steps:
+  - name: build-api
+    image: docker:dind
+    volumes:
+      - name: dockersock
+        path: /var/run/docker.sock
+    environment:
+      GHCR_USERNAME:
+        from_secret: ghcr_username
+      GHCR_TOKEN:
+        from_secret: ghcr_token
+    commands:
+      - echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+      - docker buildx create --use --name drone-builder || true
+      - docker buildx build
+          --cache-from type=registry,ref=ghcr.io/leocalm/piggypulse-api:buildcache
+          --cache-to type=registry,ref=ghcr.io/leocalm/piggypulse-api:buildcache,mode=max
+          --tag ghcr.io/leocalm/piggypulse-api:latest
+          --push
+          .
+
+  - name: build-cron
+    image: docker:dind
+    volumes:
+      - name: dockersock
+        path: /var/run/docker.sock
+    environment:
+      GHCR_USERNAME:
+        from_secret: ghcr_username
+      GHCR_TOKEN:
+        from_secret: ghcr_token
+    commands:
+      - echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+      - docker buildx create --use --name drone-builder || true
+      - docker buildx build
+          --cache-from type=registry,ref=ghcr.io/leocalm/piggypulse-cron:buildcache
+          --cache-to type=registry,ref=ghcr.io/leocalm/piggypulse-cron:buildcache,mode=max
+          --tag ghcr.io/leocalm/piggypulse-cron:latest
+          --file Dockerfile.cron
+          --push
+          .
+
+  - name: deploy
+    image: alpine:latest
+    environment:
+      HETZNER_USER:
+        from_secret: hetzner_user
+    commands:
+      # No SSH needed - we're already on the same server!
+      - cd /opt/piggypulse/budget
+      - docker compose pull
+      - docker compose up -d
+      - docker image prune -af
+    # Mount the actual filesystem
+    volumes:
+      - name: piggypulse-app
+        path: /opt/piggypulse
+
+volumes:
+  - name: dockersock
+    host:
+      path: /var/run/docker.sock
+  - name: piggypulse-app
+    host:
+      path: /opt/piggypulse
+
+---
+kind: pipeline
+type: docker
+name: notify
+
+# Runs after build-and-deploy
+depends_on:
+  - build-and-deploy
+
+trigger:
+  branch:
+    - main
+  status:
+    - success
+    - failure
+
+steps:
+  - name: notify
+    image: alpine:latest
+    commands:
+      - echo "Build ${DRONE_BUILD_STATUS}"
