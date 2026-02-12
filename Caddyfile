@@ -5,6 +5,7 @@
         format json
         level {$CADDY_LOG_LEVEL:INFO}
     }
+    tls internal
     
 
     # Reverse proxy to budget API
