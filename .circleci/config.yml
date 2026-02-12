@@ -48,6 +48,31 @@ jobs:
               --push \
               .
 
+  check-test:
+    docker:
+      - image: cimg/rust:1.93.0
+    steps:
+      - checkout
+
+      - restore_cache:
+          keys:
+            - cargo-deps-{{ checksum "Cargo.lock" }}
+            - cargo-deps-
+
+      - run:
+          name: Check formatting, lint and test
+          command: |
+            cargo fmt -- --check
+            cargo clippy -- -D warnings
+            cargo test --all
+
+      - save_cache:
+          paths:
+            - ~/.cargo/registry
+            - ~/.cargo/git
+            - target
+          key: cargo-deps-{{ checksum "Cargo.lock" }}
+
 workflows:
   build:
     jobs:
@@ -60,3 +85,7 @@ workflows:
           filters:
             branches:
               only: main
+
+  check-and-test:
+    jobs:
+      - check-test
