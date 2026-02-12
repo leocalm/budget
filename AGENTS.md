@@ -272,3 +272,32 @@ Always run the full PR check suite locally before pushing:
 - `cargo test --verbose`
 
 This mirrors `.github/workflows/rust.yml` and keeps PR checks green.
+
+## Deployment Pipeline
+
+Production deploy now uses a single workflow: `.github/workflows/publish-images.yml`.
+
+- Trigger:
+  - automatic on push to `main`
+  - manual via `workflow_dispatch`
+- Flow:
+  - build and push API image (`linux/amd64`)
+  - build and push Cron image (`linux/amd64`)
+  - deploy with Ansible from the same workflow run
+- Image refs passed to Ansible:
+  - derived deterministically from current commit SHA tags
+  - `ghcr.io/<owner>/budget-api:sha-${GITHUB_SHA}`
+  - `ghcr.io/<owner>/budget-cron:sha-${GITHUB_SHA}`
+- Vault handling:
+  - single vault password mode only (`--vault-password-file .vault_pass`)
+  - do not use multi-vault-id flags in CI for this repo
+
+Required GitHub environment/repository secrets for deploy job:
+- `ANSIBLE_VAULT_PASSWORD`
+- `PROD_WIREGUARD_CONFIG`
+- `PROD_SSH_KNOWN_HOSTS`
+- `PROD_SSH_PRIVATE_KEY_B64`
+
+Notes:
+- `PROD_SSH_PRIVATE_KEY_B64` must be base64 of the private key content (generated locally).
+- Keep deploy docs aligned with this single-workflow model; `deploy-production.yml` is intentionally removed.
