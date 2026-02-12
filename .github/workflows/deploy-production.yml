@@ -107,9 +107,11 @@ jobs:
       - name: Run Ansible deploy
         env:
           ANSIBLE_CONFIG: ansible/ansible.cfg
+          ANSIBLE_VAULT_IDENTITY_LIST: prod@.vault_pass,default@.vault_pass
         run: |
           ansible-playbook ansible/site.yml \
-            --vault-password-file .vault_pass \
+            --vault-id prod@.vault_pass \
+            --vault-id default@.vault_pass \
             --extra-vars @ansible-image-vars.yml
 
       - name: Cleanup sensitive temp files
