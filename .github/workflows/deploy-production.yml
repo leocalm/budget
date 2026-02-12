@@ -72,6 +72,24 @@ jobs:
           test -n "${{ secrets.PROD_WIREGUARD_CONFIG }}"
           test -n "${{ secrets.PROD_SSH_KNOWN_HOSTS }}"
 
+      - name: Normalize deploy image vars for Ansible
+        run: |
+          set -euo pipefail
+          api_image="$(sed -n 's/^piggypulse_api_image:[[:space:]]*//p' ansible-image-vars.yml | head -n1)"
+          cron_image="$(sed -n 's/^piggypulse_cron_image:[[:space:]]*//p' ansible-image-vars.yml | head -n1)"
+          test -n "${api_image}"
+          test -n "${cron_image}"
+          case "${api_image}" in
+            ghcr.io/*) ;;
+            *) echo "Invalid piggypulse_api_image: ${api_image}" >&2; exit 1 ;;
+          esac
+          case "${cron_image}" in
+            ghcr.io/*) ;;
+            *) echo "Invalid piggypulse_cron_image: ${cron_image}" >&2; exit 1 ;;
+          esac
+          printf 'PIGGYPULSE_API_IMAGE=%s\n' "${api_image}" >> "${GITHUB_ENV}"
+          printf 'PIGGYPULSE_CRON_IMAGE=%s\n' "${cron_image}" >> "${GITHUB_ENV}"
+
       - name: Install Ansible and WireGuard tools
         run: |
           sudo apt-get update
@@ -128,11 +146,14 @@ jobs:
         env:
           ANSIBLE_CONFIG: ansible/ansible.cfg
           ANSIBLE_VAULT_IDENTITY_LIST: prod@.vault_pass,default@.vault_pass
+          PIGGYPULSE_API_IMAGE: ${{ env.PIGGYPULSE_API_IMAGE }}
+          PIGGYPULSE_CRON_IMAGE: ${{ env.PIGGYPULSE_CRON_IMAGE }}
         run: |
           ansible-playbook ansible/site.yml \
             --vault-id prod@.vault_pass \
             --vault-id default@.vault_pass \
-            --extra-vars @ansible-image-vars.yml
+            --extra-vars "piggypulse_api_image=${PIGGYPULSE_API_IMAGE}" \
+            --extra-vars "piggypulse_cron_image=${PIGGYPULSE_CRON_IMAGE}"
 
       - name: Cleanup sensitive temp files
         if: always()
