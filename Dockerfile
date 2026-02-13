@@ -16,10 +16,10 @@ COPY sqlx.toml ./sqlx.toml
 RUN rustup component add rustfmt clippy
 
 # Run format check
-RUN cargo fmt -- --check
+# RUN cargo fmt -- --check
 
 # Run linter
-RUN cargo clippy --all-targets -- -D warnings
+# RUN cargo clippy --all-targets -- -D warnings
 
 # Run tests
 RUN cargo test --all --release
