@@ -187,6 +187,10 @@ steps:
     when:
       status:
         - failure
+      branch:
+        - main
+      event:
+        - push
     commands:
       - echo "❌ Build ${DRONE_BUILD_NUMBER} failed!"
       - echo "Commit ${DRONE_COMMIT_SHA:0:7} was not deployed"
