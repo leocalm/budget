@@ -20,11 +20,17 @@ steps:
     volumes:
       - name: cargo-registry
         path: /usr/local/cargo/registry
+      - name: cargo-git
+        path: /usr/local/cargo/git
+      - name: target
+        path: /drone/src/target
     environment:
       CARGO_BUILD_JOBS: 1
+      CARGO_TARGET_DIR: /drone/src/target
     commands:
       - rustup component add clippy
-      - cargo clippy --all-targets --no-deps -- -D warnings
+      # Run clippy in release mode so the artifacts can be reused by the release test step.
+      - cargo clippy --all-targets --no-deps --release -- -D warnings
 
   - name: test
     image: rust:1.93
@@ -38,6 +44,7 @@ steps:
     environment:
       CARGO_BUILD_JOBS: 1
       CARGO_INCREMENTAL: 0
+      CARGO_TARGET_DIR: /drone/src/target
       RUST_MIN_STACK: 8388608
     commands:
       - echo "Running tests in release mode (optimized for memory)..."
