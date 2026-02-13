@@ -3,6 +3,11 @@ kind: pipeline
 type: docker
 name: test
 
+trigger:
+  event:
+    - push
+    - pull_request
+
 steps:
   - name: format-check
     image: rust:1.93
@@ -53,6 +58,9 @@ volumes:
 kind: pipeline
 type: docker
 name: build-and-deploy
+
+depends_on:
+  - test
 
 trigger:
   branch:
