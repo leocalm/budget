@@ -96,7 +96,7 @@ steps:
         - promote
         - rollback
     commands:
-      - apk add --no-cache docker-buildx
+      - apk add --no-cache docker-cli-buildx
       - echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
       - docker buildx create --use --name drone-builder || true
       - docker buildx build
@@ -125,7 +125,7 @@ steps:
         - promote
         - rollback
     commands:
-      - apk add --no-cache docker-buildx
+      - apk add --no-cache docker-cli-buildx
       - echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
       - docker buildx create --use --name drone-builder || true
       - docker buildx build
