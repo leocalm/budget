@@ -246,7 +246,7 @@ impl Config {
     /// 1. Budget.toml (base configuration file)
     /// 2. Environment variables (prefixed with BUDGET_)
     /// 3. DATABASE_URL environment variable (fallback/backwards-compat)
-    pub fn load() -> Result<Self, figment::Error> {
+    pub fn load() -> Result<Self, Box<figment::Error>> {
         let mut cfg: Self = Figment::new()
             // Start with defaults.
             .merge(Toml::string(&toml::to_string(&Config::default()).unwrap()))
@@ -258,10 +258,10 @@ impl Config {
 
         // Backwards-compat: DATABASE_URL overrides the default/TOML value, but not an explicitly
         // set BUDGET_DATABASE__URL.
-        if std::env::var_os("BUDGET_DATABASE__URL").is_none() {
-            if let Ok(url) = std::env::var("DATABASE_URL") {
-                cfg.database.url = url;
-            }
+        if std::env::var_os("BUDGET_DATABASE__URL").is_none()
+            && let Ok(url) = std::env::var("DATABASE_URL")
+        {
+            cfg.database.url = url;
         }
 
         Ok(cfg)
