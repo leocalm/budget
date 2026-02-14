@@ -36,10 +36,7 @@ fn init_tracing(log_level: &str, json_format: bool) {
     //   RUST_LOG=info,budget::routes=debug - Global info, routes at debug
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level));
 
-    let subscriber = tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(true)
-        .with_line_number(true);
+    let subscriber = tracing_subscriber::fmt().with_env_filter(filter).with_target(true).with_line_number(true);
 
     if json_format {
         subscriber.json().init();
