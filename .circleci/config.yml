@@ -49,9 +49,9 @@ jobs:
           command: |
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
             docker buildx build \
-              --cache-from type=registry,ref=ghcr.io/leocalm/piggypulse-api:buildcache \
-              --cache-to type=registry,ref=ghcr.io/leocalm/piggypulse-api:buildcache,mode=max \
-              --tag ghcr.io/leocalm/piggypulse-api:latest \
+              --cache-from type=registry,ref=ghcr.io/leocalm/piggy-pulse-api:buildcache \
+              --cache-to type=registry,ref=ghcr.io/leocalm/piggy-pulse-api:buildcache,mode=max \
+              --tag ghcr.io/leocalm/piggy-pulse-api:latest \
               --push \
               .
 
@@ -73,9 +73,9 @@ jobs:
           command: |
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
             docker buildx build \
-              --cache-from type=registry,ref=ghcr.io/leocalm/piggypulse-cron:buildcache \
-              --cache-to type=registry,ref=ghcr.io/leocalm/piggypulse-cron:buildcache,mode=max \
-              --tag ghcr.io/leocalm/piggypulse-cron:latest \
+              --cache-from type=registry,ref=ghcr.io/leocalm/piggy-pulse-cron:buildcache \
+              --cache-to type=registry,ref=ghcr.io/leocalm/piggy-pulse-cron:buildcache,mode=max \
+              --tag ghcr.io/leocalm/piggy-pulse-cron:latest \
               --file Dockerfile.cron \
               --push \
               .

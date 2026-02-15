@@ -26,7 +26,7 @@ services:
 
   # PiggyPulse API application
   piggy-pulse:
-    image: ghcr.io/leocalm/piggypulse-api:latest
+    image: ghcr.io/leocalm/piggy-pulse-api:latest
     restart: unless-stopped
     depends_on:
       db:
@@ -96,7 +96,7 @@ services:
 
   # Cron worker for automatic period generation
   cron:
-    image: ghcr.io/leocalm/piggypulse-cron:latest
+    image: ghcr.io/leocalm/piggy-pulse-cron:latest
     restart: unless-stopped
     depends_on:
       piggy-pulse:
