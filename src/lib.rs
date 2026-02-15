@@ -1,4 +1,5 @@
 mod auth;
+mod compatibility_adapter;
 mod config;
 mod cron_tasks;
 mod database;
@@ -6,7 +7,6 @@ mod db;
 mod error;
 mod middleware;
 mod models;
-mod compatibility_adapter;
 mod routes;
 mod service;
 
