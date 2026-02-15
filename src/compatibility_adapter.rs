@@ -2,6 +2,7 @@ use serde_json::Value;
 
 /// Adapt legacy payloads by mapping known old field names to the new canonical names.
 /// This keeps v1 clients working while the codebase moves to the new field names.
+#[allow(dead_code, clippy::collapsible_if)]
 pub fn adapt_payload(mut v: Value) -> Value {
     if let Some(obj) = v.as_object_mut() {
         if obj.contains_key("old_amount") && !obj.contains_key("amount") {
