@@ -2,7 +2,7 @@ use rocket::serde::{Deserialize, Serialize};
 use schemars::JsonSchema;
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
-use zxcvbn::{zxcvbn, Score};
+use zxcvbn::{Score, zxcvbn};
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct User {
