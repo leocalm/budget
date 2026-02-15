@@ -44,10 +44,10 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ghcr.io/${{ steps.vars.outputs.owner }}/piggypulse-api:latest
-            ghcr.io/${{ steps.vars.outputs.owner }}/piggypulse-api:${{ steps.vars.outputs.short_sha }}
-          cache-from: type=registry,ref=ghcr.io/${{ steps.vars.outputs.owner }}/piggypulse-api:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ steps.vars.outputs.owner }}/piggypulse-api:buildcache,mode=max
+            ghcr.io/${{ steps.vars.outputs.owner }}/piggy-pulse-api:latest
+            ghcr.io/${{ steps.vars.outputs.owner }}/piggy-pulse-api:${{ steps.vars.outputs.short_sha }}
+          cache-from: type=registry,ref=ghcr.io/${{ steps.vars.outputs.owner }}/piggy-pulse-api:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ steps.vars.outputs.owner }}/piggy-pulse-api:buildcache,mode=max
 
       - name: Build and push cron image
         uses: docker/build-push-action@v6
@@ -57,8 +57,8 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ghcr.io/${{ steps.vars.outputs.owner }}/piggypulse-cron:latest
-            ghcr.io/${{ steps.vars.outputs.owner }}/piggypulse-cron:${{ steps.vars.outputs.short_sha }}
-          cache-from: type=registry,ref=ghcr.io/${{ steps.vars.outputs.owner }}/piggypulse-cron:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ steps.vars.outputs.owner }}/piggypulse-cron:buildcache,mode=max
+            ghcr.io/${{ steps.vars.outputs.owner }}/piggy-pulse-cron:latest
+            ghcr.io/${{ steps.vars.outputs.owner }}/piggy-pulse-cron:${{ steps.vars.outputs.short_sha }}
+          cache-from: type=registry,ref=ghcr.io/${{ steps.vars.outputs.owner }}/piggy-pulse-cron:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ steps.vars.outputs.owner }}/piggy-pulse-cron:buildcache,mode=max
 

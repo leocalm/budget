@@ -1797,6 +1797,47 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
+name = "piggy-pulse"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "argon2",
+ "async-trait",
+ "base64",
+ "chrono",
+ "data-encoding",
+ "dotenvy",
+ "figment",
+ "hex",
+ "lettre",
+ "log",
+ "okapi",
+ "password-hash",
+ "proptest",
+ "qrcode",
+ "rand 0.8.5",
+ "redis",
+ "rocket",
+ "rocket_cors",
+ "rocket_okapi",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "toml",
+ "totp-rs",
+ "tracing",
+ "tracing-subscriber",
+ "urlencoding",
+ "uuid",
+ "validator",
+ "zxcvbn",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
