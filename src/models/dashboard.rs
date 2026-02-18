@@ -71,6 +71,20 @@ pub struct TotalAssetsResponse {
 }
 
 #[derive(Serialize, Debug, JsonSchema)]
+pub struct BudgetStabilityPeriodResponse {
+    pub period_id: String,
+    pub is_outside_tolerance: bool,
+}
+
+#[derive(Serialize, Debug, JsonSchema)]
+pub struct BudgetStabilityResponse {
+    pub within_tolerance_percentage: u32,
+    pub periods_within_tolerance: u32,
+    pub total_closed_periods: u32,
+    pub recent_closed_periods: Vec<BudgetStabilityPeriodResponse>,
+}
+
+#[derive(Serialize, Debug, JsonSchema)]
 pub struct NetPositionResponse {
     pub total_net_position: i64,
     pub change_this_period: i64,

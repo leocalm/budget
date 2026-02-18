@@ -3,7 +3,8 @@ use crate::database::postgres_repository::PostgresRepository;
 use crate::error::app_error::AppError;
 use crate::middleware::rate_limit::RateLimit;
 use crate::models::dashboard::{
-    BudgetPerDayResponse, MonthProgressResponse, MonthlyBurnInResponse, NetPositionResponse, SpentPerCategoryListResponse, TotalAssetsResponse,
+    BudgetPerDayResponse, BudgetStabilityResponse, MonthProgressResponse, MonthlyBurnInResponse, NetPositionResponse, SpentPerCategoryListResponse,
+    TotalAssetsResponse,
 };
 use crate::models::pagination::CursorParams;
 use crate::models::transaction::TransactionResponse;
@@ -107,6 +108,14 @@ pub async fn get_total_assets(pool: &State<PgPool>, _rate_limit: RateLimit, curr
     Ok(Json(repo.get_total_assets(&current_user.id).await?))
 }
 
+/// Get budget stability for closed periods.
+#[openapi(tag = "Dashboard")]
+#[get("/budget-stability")]
+pub async fn get_budget_stability(pool: &State<PgPool>, _rate_limit: RateLimit, current_user: CurrentUser) -> Result<Json<BudgetStabilityResponse>, AppError> {
+    let repo = PostgresRepository { pool: pool.inner().clone() };
+    Ok(Json(repo.budget_stability(&current_user.id).await?))
+}
+
 /// Get net financial position for a budget period.
 /// Returns 400 if `period_id` is missing ("Missing period_id query parameter") or invalid.
 #[openapi(tag = "Dashboard")]
@@ -130,6 +139,7 @@ pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
         get_month_progress,
         get_recent_transactions,
         get_total_assets,
+        get_budget_stability,
         get_net_position,
     ]
 }
