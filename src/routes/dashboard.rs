@@ -3,7 +3,8 @@ use crate::database::postgres_repository::PostgresRepository;
 use crate::error::app_error::AppError;
 use crate::middleware::rate_limit::RateLimit;
 use crate::models::dashboard::{
-    BudgetPerDayResponse, BudgetStabilityResponse, MonthProgressResponse, MonthlyBurnInResponse, SpentPerCategoryListResponse, TotalAssetsResponse,
+    BudgetPerDayResponse, BudgetStabilityResponse, MonthProgressResponse, MonthlyBurnInResponse, NetPositionResponse, SpentPerCategoryListResponse,
+    TotalAssetsResponse,
 };
 use crate::models::pagination::CursorParams;
 use crate::models::transaction::TransactionResponse;

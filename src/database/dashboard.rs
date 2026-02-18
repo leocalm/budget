@@ -1,8 +1,8 @@
 use crate::database::postgres_repository::PostgresRepository;
 use crate::error::app_error::AppError;
 use crate::models::dashboard::{
-    BudgetPerDayResponse, BudgetStabilityPeriodResponse, BudgetStabilityResponse, MonthProgressResponse, MonthlyBurnInResponse, SpentPerCategoryResponse,
-    TotalAssetsResponse,
+    BudgetPerDayResponse, BudgetStabilityPeriodResponse, BudgetStabilityResponse, MonthProgressResponse, MonthlyBurnInResponse, NetPositionResponse,
+    SpentPerCategoryResponse, TotalAssetsResponse,
 };
 use crate::service::dashboard::is_outside_tolerance;
 
@@ -375,10 +375,10 @@ GROUP BY aib.balance_total
             periods_within_tolerance,
             total_closed_periods,
             recent_closed_periods,
-          })
-  }
-  
-  pub async fn get_net_position(&self, budget_period_id: &Uuid, user_id: &Uuid) -> Result<NetPositionResponse, AppError> {
+        })
+    }
+
+    pub async fn get_net_position(&self, budget_period_id: &Uuid, user_id: &Uuid) -> Result<NetPositionResponse, AppError> {
         #[derive(sqlx::FromRow)]
         struct NetPositionRow {
             total_net_position: i64,

@@ -84,6 +84,7 @@ pub struct BudgetStabilityResponse {
     pub recent_closed_periods: Vec<BudgetStabilityPeriodResponse>,
 }
 
+#[derive(Serialize, Debug, JsonSchema)]
 pub struct NetPositionResponse {
     pub total_net_position: i64,
     pub change_this_period: i64,
