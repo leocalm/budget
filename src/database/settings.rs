@@ -40,7 +40,7 @@ impl PostgresRepository {
                 language = EXCLUDED.language,
                 default_currency_id = EXCLUDED.default_currency_id,
                 budget_stability_tolerance_basis_points = COALESCE(
-                    EXCLUDED.budget_stability_tolerance_basis_points,
+                    $5,
                     settings.budget_stability_tolerance_basis_points
                 ),
                 updated_at = now()
