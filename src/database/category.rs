@@ -490,6 +490,7 @@ FROM category c
                        AND t.occurred_at >= (SELECT start_date FROM selected_period)
                        AND t.occurred_at <= (SELECT end_date FROM selected_period)
 WHERE c.user_id = $1
+  AND c.category_type = 'Outgoing'
   AND bc.id IS NULL
 GROUP BY c.id, c.name, c.color, c.icon, c.parent_id, c.category_type
 ORDER BY actual_value DESC, c.name
