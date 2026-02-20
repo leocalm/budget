@@ -47,6 +47,8 @@ fn account_responses(accounts: &[AccountWithMetrics], balance_per_day: &[Account
                 currency: CurrencyResponse::from(&account_data.currency),
                 balance: account.current_balance,
                 spend_limit: account_data.spend_limit,
+                is_archived: account_data.is_archived,
+                next_transfer_amount: account_data.next_transfer_amount,
                 balance_per_day: per_day,
                 balance_change_this_period: account.balance_change_this_period,
                 transaction_count: account.transaction_count,

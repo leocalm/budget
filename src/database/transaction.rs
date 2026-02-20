@@ -79,6 +79,8 @@ impl From<TransactionRow> for Transaction {
                 },
                 balance: row.to_account_balance.unwrap(),
                 spend_limit: row.to_account_spend_limit,
+                is_archived: false,
+                next_transfer_amount: None,
             })
         } else {
             None
@@ -125,6 +127,8 @@ impl From<TransactionRow> for Transaction {
                 },
                 balance: row.from_account_balance,
                 spend_limit: row.from_account_spend_limit,
+                is_archived: false,
+                next_transfer_amount: None,
             },
 
             to_account,

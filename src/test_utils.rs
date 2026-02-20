@@ -53,6 +53,8 @@ impl From<&AccountRequest> for Account {
             },
             balance: request.balance,
             spend_limit: request.spend_limit,
+            is_archived: false,
+            next_transfer_amount: request.next_transfer_amount,
         }
     }
 }
@@ -88,6 +90,8 @@ pub fn sample_account() -> Account {
         },
         balance: 1_000,
         spend_limit: None,
+        is_archived: false,
+        next_transfer_amount: None,
     }
 }
 

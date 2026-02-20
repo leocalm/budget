@@ -25,6 +25,8 @@ pub struct Account {
     pub currency: Currency,
     pub balance: i64,
     pub spend_limit: Option<i32>,
+    pub is_archived: bool,
+    pub next_transfer_amount: Option<i64>,
 }
 
 #[derive(Deserialize, Debug, Validate, JsonSchema)]
@@ -39,6 +41,12 @@ pub struct AccountRequest {
     #[validate(range(min = 0))]
     pub balance: i64,
     pub spend_limit: Option<i32>,
+    pub next_transfer_amount: Option<i64>,
+}
+
+#[derive(Deserialize, Debug, Validate, JsonSchema)]
+pub struct AdjustStartingBalanceRequest {
+    pub new_balance: i64,
 }
 
 #[derive(Serialize, Debug, JsonSchema)]
@@ -51,6 +59,8 @@ pub struct AccountResponse {
     pub currency: CurrencyResponse,
     pub balance: i64,
     pub spend_limit: Option<i32>,
+    pub is_archived: bool,
+    pub next_transfer_amount: Option<i64>,
 }
 
 impl From<&Account> for AccountResponse {
@@ -71,6 +81,8 @@ impl From<&Account> for AccountResponse {
             },
             balance: account.balance,
             spend_limit: account.spend_limit,
+            is_archived: account.is_archived,
+            next_transfer_amount: account.next_transfer_amount,
         }
     }
 }
@@ -85,6 +97,8 @@ pub struct AccountListResponse {
     pub currency: CurrencyResponse,
     pub balance: i64,
     pub spend_limit: Option<i32>,
+    pub is_archived: bool,
+    pub next_transfer_amount: Option<i64>,
     pub balance_per_day: Vec<BudgetPerDayResponse>,
     pub balance_change_this_period: i64,
     pub transaction_count: i64,
@@ -118,4 +132,23 @@ pub struct AccountOptionResponse {
     pub id: Uuid,
     pub name: String,
     pub icon: String,
+}
+
+/// Response for the management list endpoint — includes all accounts (incl. archived)
+/// with management-specific fields.
+#[derive(Serialize, Debug, JsonSchema)]
+pub struct AccountManagementResponse {
+    pub id: Uuid,
+    pub name: String,
+    pub color: String,
+    pub icon: String,
+    pub account_type: AccountType,
+    pub currency: CurrencyResponse,
+    pub balance: i64,
+    pub spend_limit: Option<i32>,
+    pub is_archived: bool,
+    pub next_transfer_amount: Option<i64>,
+    pub transaction_count: i64,
+    pub can_delete: bool,
+    pub can_adjust_balance: bool,
 }
