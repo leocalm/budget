@@ -1,7 +1,7 @@
 use crate::database::postgres_repository::{PostgresRepository, is_unique_violation};
 use crate::error::app_error::AppError;
-use crate::models::account::{Account, AccountBalancePerDay, AccountRequest, AccountType, AccountWithMetrics};
-use crate::models::currency::{Currency, SymbolPosition};
+use crate::models::account::{Account, AccountBalancePerDay, AccountManagementResponse, AccountRequest, AccountType, AccountUpdateRequest, AccountWithMetrics};
+use crate::models::currency::{Currency, CurrencyResponse, SymbolPosition};
 use crate::models::pagination::CursorParams;
 use uuid::Uuid;
 
@@ -15,6 +15,8 @@ struct AccountRow {
     account_type: String,
     balance: i64,
     spend_limit: Option<i32>,
+    is_archived: bool,
+    next_transfer_amount: Option<i64>,
     currency_id: Uuid,
     currency_name: String,
     currency_symbol: String,
@@ -41,6 +43,8 @@ impl From<AccountRow> for Account {
             },
             balance: row.balance,
             spend_limit: row.spend_limit,
+            is_archived: row.is_archived,
+            next_transfer_amount: row.next_transfer_amount,
         }
     }
 }
@@ -54,6 +58,8 @@ struct AccountMetricsRow {
     account_type: String,
     balance: i64,
     spend_limit: Option<i32>,
+    is_archived: bool,
+    next_transfer_amount: Option<i64>,
     currency_id: Uuid,
     currency_name: String,
     currency_symbol: String,
@@ -84,12 +90,36 @@ impl From<AccountMetricsRow> for AccountWithMetrics {
                 },
                 balance: row.balance,
                 spend_limit: row.spend_limit,
+                is_archived: row.is_archived,
+                next_transfer_amount: row.next_transfer_amount,
             },
             current_balance: row.current_balance,
             balance_change_this_period: row.balance_change_this_period,
             transaction_count: row.transaction_count,
         }
     }
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct AccountManagementRow {
+    id: Uuid,
+    name: String,
+    color: String,
+    icon: String,
+    account_type: String,
+    balance: i64,
+    spend_limit: Option<i32>,
+    is_archived: bool,
+    next_transfer_amount: Option<i64>,
+    currency_id: Uuid,
+    currency_name: String,
+    currency_symbol: String,
+    currency_code: String,
+    currency_decimal_places: i32,
+    currency_symbol_position: SymbolPosition,
+    transaction_count: i64,
+    can_delete: bool,
+    can_adjust_balance: bool,
 }
 
 impl PostgresRepository {
@@ -131,7 +161,7 @@ impl PostgresRepository {
             .await?
             .ok_or_else(|| AppError::NotFound(format!("Default currency {} not found", currency_id)))?;
 
-        let account_type_str = request.account_type_to_db();
+        let account_type_str = account_type_to_db(&request.account_type);
 
         #[derive(sqlx::FromRow)]
         struct CreateAccountRow {
@@ -142,12 +172,14 @@ impl PostgresRepository {
             account_type: String,
             balance: i64,
             spend_limit: Option<i32>,
+            is_archived: bool,
+            next_transfer_amount: Option<i64>,
         }
 
         let row = sqlx::query_as::<_, CreateAccountRow>(
             r#"
-            INSERT INTO account (user_id, name, color, icon, account_type, currency_id, balance, spend_limit)
-            VALUES ($1, $2, $3, $4, $5::text::account_type, $6, $7, $8)
+            INSERT INTO account (user_id, name, color, icon, account_type, currency_id, balance, spend_limit, next_transfer_amount)
+            VALUES ($1, $2, $3, $4, $5::text::account_type, $6, $7, $8, $9)
             RETURNING
                 id,
                 name,
@@ -155,7 +187,9 @@ impl PostgresRepository {
                 icon,
                 account_type::text as account_type,
                 balance,
-                spend_limit
+                spend_limit,
+                is_archived,
+                next_transfer_amount
             "#,
         )
         .bind(user_id)
@@ -166,6 +200,7 @@ impl PostgresRepository {
         .bind(currency_id)
         .bind(request.balance)
         .bind(request.spend_limit)
+        .bind(request.next_transfer_amount)
         .fetch_one(&self.pool)
         .await;
 
@@ -186,6 +221,8 @@ impl PostgresRepository {
             currency,
             balance: row.balance,
             spend_limit: row.spend_limit,
+            is_archived: row.is_archived,
+            next_transfer_amount: row.next_transfer_amount,
         })
     }
 
@@ -200,6 +237,8 @@ impl PostgresRepository {
                 a.account_type::text as account_type,
                 a.balance,
                 a.spend_limit,
+                a.is_archived,
+                a.next_transfer_amount,
                 c.id as currency_id,
                 c.name as currency_name,
                 c.symbol as currency_symbol,
@@ -236,6 +275,8 @@ impl PostgresRepository {
                     a.account_type::text as account_type,
                     a.balance,
                     a.spend_limit,
+                    a.is_archived,
+                    a.next_transfer_amount,
                     c.id as currency_id,
                     c.name as currency_name,
                     c.symbol as currency_symbol,
@@ -279,7 +320,7 @@ impl PostgresRepository {
                 LEFT JOIN category cat ON t.category_id = cat.id
                 WHERE (a.created_at, a.id) < (
                     SELECT created_at, id FROM account WHERE id = $1
-                ) AND a.user_id = $3
+                ) AND a.user_id = $3 AND a.is_archived = FALSE
                 GROUP BY
                     a.id,
                     a.user_id,
@@ -290,6 +331,8 @@ impl PostgresRepository {
                     a.balance,
                     a.created_at,
                     a.spend_limit,
+                    a.is_archived,
+                    a.next_transfer_amount,
                     c.id,
                     c.name,
                     c.symbol,
@@ -322,6 +365,8 @@ impl PostgresRepository {
                     a.account_type::text as account_type,
                     a.balance,
                     a.spend_limit,
+                    a.is_archived,
+                    a.next_transfer_amount,
                     c.id as currency_id,
                     c.name as currency_name,
                     c.symbol as currency_symbol,
@@ -363,7 +408,7 @@ impl PostgresRepository {
                 LEFT JOIN period p ON true
                 LEFT JOIN transaction t ON (t.from_account_id = a.id OR t.to_account_id = a.id) AND t.user_id = $2
                 LEFT JOIN category cat ON t.category_id = cat.id
-                WHERE a.user_id = $2
+                WHERE a.user_id = $2 AND a.is_archived = FALSE
                 GROUP BY
                     a.id,
                     a.user_id,
@@ -374,6 +419,8 @@ impl PostgresRepository {
                     a.balance,
                     a.created_at,
                     a.spend_limit,
+                    a.is_archived,
+                    a.next_transfer_amount,
                     c.id,
                     c.name,
                     c.symbol,
@@ -392,6 +439,205 @@ impl PostgresRepository {
         };
 
         Ok(rows.into_iter().map(AccountWithMetrics::from).collect())
+    }
+
+    pub async fn list_accounts_management(&self, user_id: &Uuid) -> Result<Vec<AccountManagementResponse>, AppError> {
+        let rows = sqlx::query_as::<_, AccountManagementRow>(
+            r#"
+            SELECT
+                a.id,
+                a.name,
+                a.color,
+                a.icon,
+                a.account_type::text as account_type,
+                a.balance,
+                a.spend_limit,
+                a.is_archived,
+                a.next_transfer_amount,
+                c.id as currency_id,
+                c.name as currency_name,
+                c.symbol as currency_symbol,
+                c.currency as currency_code,
+                c.decimal_places as currency_decimal_places,
+                c.symbol_position as currency_symbol_position,
+                COALESCE(tx.tx_count, 0)::bigint AS transaction_count,
+                (COALESCE(tx.tx_count, 0) = 0) AS can_delete,
+                (
+                    SELECT COALESCE(
+                        (
+                            SELECT bp.end_date >= CURRENT_DATE
+                            FROM budget_period bp
+                            WHERE bp.user_id = $1
+                            ORDER BY bp.start_date ASC
+                            LIMIT 1
+                        ),
+                        FALSE
+                    )
+                ) AS can_adjust_balance
+            FROM account a
+            JOIN currency c ON c.id = a.currency_id
+            LEFT JOIN (
+                SELECT
+                    COALESCE(from_account_id, to_account_id) AS acct_id,
+                    COUNT(*) AS tx_count
+                FROM transaction
+                WHERE user_id = $1
+                GROUP BY COALESCE(from_account_id, to_account_id)
+            ) tx ON tx.acct_id = a.id
+            WHERE a.user_id = $1
+            ORDER BY a.is_archived ASC, a.account_type::text ASC, a.name ASC
+            "#,
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| AccountManagementResponse {
+                id: row.id,
+                name: row.name,
+                color: row.color,
+                icon: row.icon,
+                account_type: account_type_from_db(&row.account_type),
+                currency: CurrencyResponse {
+                    id: row.currency_id,
+                    name: row.currency_name,
+                    symbol: row.currency_symbol,
+                    currency: row.currency_code,
+                    decimal_places: row.currency_decimal_places,
+                    symbol_position: row.currency_symbol_position,
+                },
+                balance: row.balance,
+                spend_limit: row.spend_limit,
+                is_archived: row.is_archived,
+                next_transfer_amount: row.next_transfer_amount,
+                transaction_count: row.transaction_count,
+                can_delete: row.can_delete,
+                can_adjust_balance: row.can_adjust_balance,
+            })
+            .collect())
+    }
+
+    pub async fn archive_account(&self, id: &Uuid, user_id: &Uuid) -> Result<(), AppError> {
+        let affected = sqlx::query("UPDATE account SET is_archived = TRUE WHERE id = $1 AND user_id = $2 AND is_archived = FALSE")
+            .bind(id)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?
+            .rows_affected();
+
+        if affected == 0 {
+            return Err(AppError::NotFound("Account not found or already archived".to_string()));
+        }
+
+        Ok(())
+    }
+
+    pub async fn restore_account(&self, id: &Uuid, user_id: &Uuid) -> Result<(), AppError> {
+        let affected = sqlx::query("UPDATE account SET is_archived = FALSE WHERE id = $1 AND user_id = $2 AND is_archived = TRUE")
+            .bind(id)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?
+            .rows_affected();
+
+        if affected == 0 {
+            return Err(AppError::NotFound("Account not found or not archived".to_string()));
+        }
+
+        Ok(())
+    }
+
+    pub async fn delete_account(&self, id: &Uuid, user_id: &Uuid) -> Result<(), AppError> {
+        // Guard: block deletion if transactions exist for this account
+        let has_transactions: bool = sqlx::query_scalar(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM transaction
+                WHERE user_id = $1 AND (from_account_id = $2 OR to_account_id = $2)
+            )
+            "#,
+        )
+        .bind(user_id)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        if has_transactions {
+            return Err(AppError::BadRequest(
+                "Cannot delete account with existing transactions. Archive it instead.".to_string(),
+            ));
+        }
+
+        sqlx::query("DELETE FROM account WHERE id = $1 AND user_id = $2")
+            .bind(id)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn adjust_starting_balance(&self, id: &Uuid, new_balance: i64, user_id: &Uuid) -> Result<Account, AppError> {
+        // Check that the earliest budget period is still open (end_date >= today)
+        let earliest_period_open: Option<bool> = sqlx::query_scalar(
+            r#"
+            SELECT end_date >= CURRENT_DATE
+            FROM budget_period
+            WHERE user_id = $1
+            ORDER BY start_date ASC
+            LIMIT 1
+            "#,
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match earliest_period_open {
+            Some(true) => {}
+            Some(false) => {
+                return Err(AppError::BadRequest(
+                    "Cannot adjust starting balance: earliest budget period is already closed.".to_string(),
+                ));
+            }
+            None => {
+                return Err(AppError::BadRequest("Cannot adjust starting balance: no budget periods found.".to_string()));
+            }
+        }
+
+        let row = sqlx::query_as::<_, AccountRow>(
+            r#"
+            UPDATE account
+            SET balance = $1
+            WHERE id = $2 AND user_id = $3
+            RETURNING
+                id,
+                name,
+                color,
+                icon,
+                account_type::text as account_type,
+                balance,
+                spend_limit,
+                is_archived,
+                next_transfer_amount,
+                (SELECT cu.id FROM currency cu WHERE cu.id = currency_id) as currency_id,
+                (SELECT cu.name FROM currency cu WHERE cu.id = currency_id) as currency_name,
+                (SELECT cu.symbol FROM currency cu WHERE cu.id = currency_id) as currency_symbol,
+                (SELECT cu.currency FROM currency cu WHERE cu.id = currency_id) as currency_code,
+                (SELECT cu.decimal_places FROM currency cu WHERE cu.id = currency_id) as currency_decimal_places,
+                (SELECT cu.symbol_position FROM currency cu WHERE cu.id = currency_id) as currency_symbol_position
+            "#,
+        )
+        .bind(new_balance)
+        .bind(id)
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Account not found".to_string()))?;
+
+        Ok(Account::from(row))
     }
 
     pub async fn list_account_balance_per_day(
@@ -505,16 +751,6 @@ ORDER BY a.id, d.day
             .collect())
     }
 
-    pub async fn delete_account(&self, id: &Uuid, user_id: &Uuid) -> Result<(), AppError> {
-        sqlx::query("DELETE FROM account WHERE id = $1 AND user_id = $2")
-            .bind(id)
-            .bind(user_id)
-            .execute(&self.pool)
-            .await?;
-
-        Ok(())
-    }
-
     pub async fn get_account_options(&self, user_id: &Uuid) -> Result<Vec<(Uuid, String, String)>, AppError> {
         #[derive(sqlx::FromRow)]
         struct AccountOptionRow {
@@ -527,7 +763,7 @@ ORDER BY a.id, d.day
             r#"
             SELECT id, name, icon
             FROM account
-            WHERE user_id = $1
+            WHERE user_id = $1 AND is_archived = FALSE
             ORDER BY name ASC
             "#,
         )
@@ -557,7 +793,7 @@ ORDER BY a.id, d.day
                     ELSE 0
                 END), 0)::bigint AS total_liabilities
             FROM account
-            WHERE user_id = $1
+            WHERE user_id = $1 AND is_archived = FALSE
             "#,
         )
         .bind(user_id)
@@ -568,7 +804,7 @@ ORDER BY a.id, d.day
         Ok((total_net_worth, row.total_assets, row.total_liabilities))
     }
 
-    pub async fn update_account(&self, id: &Uuid, request: &AccountRequest, user_id: &Uuid) -> Result<Account, AppError> {
+    pub async fn update_account(&self, id: &Uuid, request: &AccountUpdateRequest, user_id: &Uuid) -> Result<Account, AppError> {
         let name_exists: bool = sqlx::query_scalar(
             r#"
             SELECT EXISTS (
@@ -595,7 +831,7 @@ ORDER BY a.id, d.day
             .ok_or_else(|| AppError::NotFound("Account not found".to_string()))?;
         let currency = existing_account.currency;
 
-        let account_type_str = request.account_type_to_db();
+        let account_type_str = account_type_to_db(&request.account_type);
 
         #[derive(sqlx::FromRow)]
         struct UpdateAccountRow {
@@ -606,13 +842,15 @@ ORDER BY a.id, d.day
             account_type: String,
             balance: i64,
             spend_limit: Option<i32>,
+            is_archived: bool,
+            next_transfer_amount: Option<i64>,
         }
 
         let row = sqlx::query_as::<_, UpdateAccountRow>(
             r#"
             UPDATE account
-            SET name = $1, color = $2, icon = $3, account_type = $4::text::account_type, balance = $5, spend_limit = $6
-            WHERE id = $7 and user_id = $8
+            SET name = $1, color = $2, icon = $3, account_type = $4::text::account_type, spend_limit = $5, next_transfer_amount = $6
+            WHERE id = $7 AND user_id = $8
             RETURNING
                 id,
                 name,
@@ -620,15 +858,17 @@ ORDER BY a.id, d.day
                 icon,
                 account_type::text as account_type,
                 balance,
-                spend_limit
+                spend_limit,
+                is_archived,
+                next_transfer_amount
             "#,
         )
         .bind(&request.name)
         .bind(&request.color)
         .bind(&request.icon)
         .bind(&account_type_str)
-        .bind(request.balance)
         .bind(request.spend_limit)
+        .bind(request.next_transfer_amount)
         .bind(id)
         .bind(user_id)
         .fetch_one(&self.pool)
@@ -651,6 +891,8 @@ ORDER BY a.id, d.day
             currency,
             balance: row.balance,
             spend_limit: row.spend_limit,
+            is_archived: row.is_archived,
+            next_transfer_amount: row.next_transfer_amount,
         })
     }
 }
@@ -666,19 +908,13 @@ pub fn account_type_from_db<T: AsRef<str>>(value: T) -> AccountType {
     }
 }
 
-trait AccountRequestDbExt {
-    fn account_type_to_db(&self) -> String;
-}
-
-impl AccountRequestDbExt for AccountRequest {
-    fn account_type_to_db(&self) -> String {
-        match self.account_type {
-            AccountType::Checking => "Checking".to_string(),
-            AccountType::Savings => "Savings".to_string(),
-            AccountType::CreditCard => "CreditCard".to_string(),
-            AccountType::Wallet => "Wallet".to_string(),
-            AccountType::Allowance => "Allowance".to_string(),
-        }
+pub fn account_type_to_db(account_type: &AccountType) -> String {
+    match account_type {
+        AccountType::Checking => "Checking".to_string(),
+        AccountType::Savings => "Savings".to_string(),
+        AccountType::CreditCard => "CreditCard".to_string(),
+        AccountType::Wallet => "Wallet".to_string(),
+        AccountType::Allowance => "Allowance".to_string(),
     }
 }
 
@@ -710,8 +946,9 @@ mod tests {
             account_type: AccountType::Checking,
             balance: 0,
             spend_limit: None,
+            next_transfer_amount: None,
         };
-        assert_eq!(request.account_type_to_db(), "Checking");
+        assert_eq!(account_type_to_db(&request.account_type), "Checking");
 
         let request_savings = AccountRequest {
             name: "Test".to_string(),
@@ -720,8 +957,9 @@ mod tests {
             account_type: AccountType::Savings,
             balance: 0,
             spend_limit: None,
+            next_transfer_amount: None,
         };
-        assert_eq!(request_savings.account_type_to_db(), "Savings");
+        assert_eq!(account_type_to_db(&request_savings.account_type), "Savings");
 
         let request_credit = AccountRequest {
             name: "Test".to_string(),
@@ -730,7 +968,8 @@ mod tests {
             account_type: AccountType::CreditCard,
             balance: 0,
             spend_limit: None,
+            next_transfer_amount: None,
         };
-        assert_eq!(request_credit.account_type_to_db(), "CreditCard");
+        assert_eq!(account_type_to_db(&request_credit.account_type), "CreditCard");
     }
 }

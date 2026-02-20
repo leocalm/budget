@@ -2,11 +2,14 @@ use crate::auth::CurrentUser;
 use crate::database::postgres_repository::PostgresRepository;
 use crate::error::app_error::AppError;
 use crate::middleware::rate_limit::RateLimit;
-use crate::models::account::{AccountListResponse, AccountOptionResponse, AccountRequest, AccountResponse, AccountsSummaryResponse};
+use crate::models::account::{
+    AccountListResponse, AccountManagementResponse, AccountOptionResponse, AccountRequest, AccountResponse, AccountUpdateRequest, AccountsSummaryResponse,
+    AdjustStartingBalanceRequest,
+};
 use crate::models::pagination::{CursorPaginatedResponse, CursorParams};
 use crate::service::account::AccountService;
 use rocket::serde::json::Json;
-use rocket::{State, delete, get, http::Status, post, put};
+use rocket::{State, delete, get, http::Status, patch, post, put};
 use rocket_okapi::openapi;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -55,6 +58,19 @@ pub async fn list_all_accounts(
     Ok(Json(CursorPaginatedResponse::from_rows(responses, params.effective_limit(), |r| r.id)))
 }
 
+/// Get all accounts for the management view (includes archived, no period metrics)
+#[openapi(tag = "Accounts")]
+#[get("/management")]
+pub async fn list_accounts_management(
+    pool: &State<PgPool>,
+    _rate_limit: RateLimit,
+    current_user: CurrentUser,
+) -> Result<Json<Vec<AccountManagementResponse>>, AppError> {
+    let repo = PostgresRepository { pool: pool.inner().clone() };
+    let accounts = repo.list_accounts_management(&current_user.id).await?;
+    Ok(Json(accounts))
+}
+
 /// Get an account by ID
 #[openapi(tag = "Accounts")]
 #[get("/<id>")]
@@ -68,7 +84,7 @@ pub async fn get_account(pool: &State<PgPool>, _rate_limit: RateLimit, current_u
     }
 }
 
-/// Delete an account by ID
+/// Delete an account by ID (only if no transactions exist)
 #[openapi(tag = "Accounts")]
 #[delete("/<id>")]
 pub async fn delete_account(pool: &State<PgPool>, _rate_limit: RateLimit, current_user: CurrentUser, id: &str) -> Result<Status, AppError> {
@@ -86,11 +102,47 @@ pub async fn put_account(
     _rate_limit: RateLimit,
     current_user: CurrentUser,
     id: &str,
-    payload: Json<AccountRequest>,
+    payload: Json<AccountUpdateRequest>,
 ) -> Result<Json<AccountResponse>, AppError> {
     let repo = PostgresRepository { pool: pool.inner().clone() };
     let uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid account id", e))?;
     let account = repo.update_account(&uuid, &payload, &current_user.id).await?;
+    Ok(Json(AccountResponse::from(&account)))
+}
+
+/// Archive an account by ID
+#[openapi(tag = "Accounts")]
+#[patch("/<id>/archive")]
+pub async fn archive_account(pool: &State<PgPool>, _rate_limit: RateLimit, current_user: CurrentUser, id: &str) -> Result<Status, AppError> {
+    let repo = PostgresRepository { pool: pool.inner().clone() };
+    let uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid account id", e))?;
+    repo.archive_account(&uuid, &current_user.id).await?;
+    Ok(Status::Ok)
+}
+
+/// Restore an archived account by ID
+#[openapi(tag = "Accounts")]
+#[patch("/<id>/restore")]
+pub async fn restore_account(pool: &State<PgPool>, _rate_limit: RateLimit, current_user: CurrentUser, id: &str) -> Result<Status, AppError> {
+    let repo = PostgresRepository { pool: pool.inner().clone() };
+    let uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid account id", e))?;
+    repo.restore_account(&uuid, &current_user.id).await?;
+    Ok(Status::Ok)
+}
+
+/// Adjust the starting balance of an account (only if earliest budget period is open)
+#[openapi(tag = "Accounts")]
+#[post("/<id>/adjust-balance", data = "<payload>")]
+pub async fn adjust_starting_balance(
+    pool: &State<PgPool>,
+    _rate_limit: RateLimit,
+    current_user: CurrentUser,
+    id: &str,
+    payload: Json<AdjustStartingBalanceRequest>,
+) -> Result<Json<AccountResponse>, AppError> {
+    let repo = PostgresRepository { pool: pool.inner().clone() };
+    let uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid account id", e))?;
+    let account = repo.adjust_starting_balance(&uuid, payload.new_balance, &current_user.id).await?;
     Ok(Json(AccountResponse::from(&account)))
 }
 
@@ -125,9 +177,13 @@ pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
     rocket_okapi::openapi_get_routes_spec![
         create_account,
         list_all_accounts,
+        list_accounts_management,
         get_account,
         delete_account,
         put_account,
+        archive_account,
+        restore_account,
+        adjust_starting_balance,
         get_accounts_summary,
         get_account_options
     ]
@@ -574,5 +630,57 @@ mod tests {
             assert!(account["name"].as_str().is_some());
             assert!(account["icon"].as_str().is_some());
         }
+    }
+
+    #[rocket::async_test]
+    #[ignore = "requires database"]
+    async fn test_archive_account() {
+        let mut config = Config::default();
+        config.database.url = "postgres://postgres:example@127.0.0.1:5432/piggy_pulse_db".to_string();
+        config.rate_limit.require_client_ip = false;
+        config.session.cookie_secure = false;
+
+        let client = Client::tracked(build_rocket(config)).await.expect("valid rocket instance");
+        create_user_and_auth(&client).await;
+
+        let account_id = create_account(&client, &format!("Archive Me {}", Uuid::new_v4()), 5_000).await;
+
+        let archive_response = client.patch(format!("/api/v1/accounts/{}/archive", account_id)).dispatch().await;
+        assert_eq!(archive_response.status(), Status::Ok);
+
+        // Management view should show account as archived
+        let mgmt_response = client.get("/api/v1/accounts/management").dispatch().await;
+        assert_eq!(mgmt_response.status(), Status::Ok);
+        let body = mgmt_response.into_string().await.expect("management response body");
+        let json: Value = serde_json::from_str(&body).expect("valid management json");
+        let accounts = json.as_array().expect("accounts array");
+        let archived = accounts
+            .iter()
+            .find(|a| a["id"].as_str().is_some_and(|id| id == account_id))
+            .expect("account in management list");
+        assert!(archived["is_archived"].as_bool().unwrap_or_default());
+    }
+
+    #[rocket::async_test]
+    #[ignore = "requires database"]
+    async fn test_delete_account_with_transactions_fails() {
+        let mut config = Config::default();
+        config.database.url = "postgres://postgres:example@127.0.0.1:5432/piggy_pulse_db".to_string();
+        config.rate_limit.require_client_ip = false;
+        config.session.cookie_secure = false;
+
+        let client = Client::tracked(build_rocket(config)).await.expect("valid rocket instance");
+        create_user_and_auth(&client).await;
+
+        let category_id = create_category(&client, &format!("Cat {}", Uuid::new_v4()), "Outgoing").await;
+        let account_id = create_account(&client, &format!("Has Transactions {}", Uuid::new_v4()), 10_000).await;
+        let today = Utc::now().date_naive();
+        create_transaction(&client, &category_id, &account_id, today, 100).await;
+
+        let delete_response = client.delete(format!("/api/v1/accounts/{}", account_id)).dispatch().await;
+        assert_eq!(delete_response.status(), Status::BadRequest);
+
+        let body = delete_response.into_string().await.expect("error body");
+        assert!(body.contains("Cannot delete account with existing transactions"));
     }
 }

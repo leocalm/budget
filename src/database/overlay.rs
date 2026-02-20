@@ -716,6 +716,8 @@ impl PostgresRepository {
             currency,
             balance: 0, // Not needed for overlay context
             spend_limit: account_row.spend_limit,
+            is_archived: false,
+            next_transfer_amount: None,
         })
     }
 
