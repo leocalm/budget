@@ -3,8 +3,8 @@ use crate::database::postgres_repository::PostgresRepository;
 use crate::error::app_error::AppError;
 use crate::middleware::rate_limit::RateLimit;
 use crate::models::account::{
-    AccountBalanceHistoryPoint, AccountDetailResponse, AccountListResponse, AccountManagementResponse, AccountOptionResponse, AccountRequest, AccountResponse,
-    AccountTransactionResponse, AccountUpdateRequest, AccountsSummaryResponse, AdjustStartingBalanceRequest,
+    AccountBalanceHistoryPoint, AccountContextResponse, AccountDetailResponse, AccountListResponse, AccountManagementResponse, AccountOptionResponse,
+    AccountRequest, AccountResponse, AccountTransactionResponse, AccountUpdateRequest, AccountsSummaryResponse, AdjustStartingBalanceRequest,
 };
 use crate::models::pagination::{CursorPaginatedResponse, CursorParams};
 use crate::service::account::AccountService;
@@ -248,6 +248,23 @@ pub async fn list_account_transactions(
     Ok(Json(CursorPaginatedResponse::from_rows(txs, params.effective_limit(), |r| r.id)))
 }
 
+/// Get context (category impact + stability) for an account — loaded lazily
+#[openapi(tag = "Accounts")]
+#[get("/<id>/context?<period_id>")]
+pub async fn get_account_context(
+    pool: &State<PgPool>,
+    _rate_limit: RateLimit,
+    current_user: CurrentUser,
+    id: &str,
+    period_id: String,
+) -> Result<Json<AccountContextResponse>, AppError> {
+    let repo = PostgresRepository { pool: pool.inner().clone() };
+    let account_uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid account id", e))?;
+    let period_uuid = Uuid::parse_str(&period_id).map_err(|e| AppError::uuid("Invalid period id", e))?;
+    let ctx = repo.get_account_context(&account_uuid, &period_uuid, &current_user.id).await?;
+    Ok(Json(ctx))
+}
+
 pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
     rocket_okapi::openapi_get_routes_spec![
         create_account,
@@ -263,7 +280,8 @@ pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
         get_account_options,
         get_account_detail,
         get_account_balance_history,
-        list_account_transactions
+        list_account_transactions,
+        get_account_context
     ]
 }
 
@@ -875,5 +893,33 @@ mod tests {
         assert!(!data.is_empty());
         assert!(data[0]["running_balance"].as_i64().is_some());
         assert!(data[0]["flow"].as_str().is_some());
+    }
+
+    #[rocket::async_test]
+    #[ignore = "requires database"]
+    async fn test_get_account_context() {
+        let mut config = Config::default();
+        config.database.url = "postgres://postgres:example@127.0.0.1:5432/piggy_pulse_db".to_string();
+        config.rate_limit.require_client_ip = false;
+        config.session.cookie_secure = false;
+
+        let client = Client::tracked(build_rocket(config)).await.expect("valid rocket instance");
+        create_user_and_auth(&client).await;
+
+        let expense_id = create_category(&client, "Rent", "Outgoing").await;
+        let account_id = create_account(&client, "Test Checking", 100_000).await;
+        let today = Utc::now().date_naive();
+        let start = today.checked_sub_signed(Duration::days(5)).unwrap_or(today);
+        let period_id = create_budget_period(&client, start, today).await;
+        create_transaction(&client, &expense_id, &account_id, start, 20_000).await;
+
+        let response = client
+            .get(format!("/api/v1/accounts/{}/context?period_id={}", account_id, period_id))
+            .dispatch()
+            .await;
+        assert_eq!(response.status(), Status::Ok);
+        let json: Value = serde_json::from_str(&response.into_string().await.unwrap()).unwrap();
+        assert!(json["category_impact"].as_array().is_some());
+        assert!(json["stability"]["periods_evaluated"].as_i64().is_some());
     }
 }
