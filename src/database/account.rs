@@ -2,7 +2,7 @@ use crate::database::postgres_repository::{PostgresRepository, is_unique_violati
 use crate::error::app_error::AppError;
 use crate::models::account::{
     Account, AccountBalanceHistoryPoint, AccountBalancePerDay, AccountContextResponse, AccountDetailResponse, AccountManagementResponse, AccountRequest,
-    AccountStability, AccountTransactionResponse, CategoryImpactItem, AccountType, AccountUpdateRequest, AccountWithMetrics,
+    AccountStability, AccountTransactionResponse, AccountType, AccountUpdateRequest, AccountWithMetrics, CategoryImpactItem,
 };
 use crate::models::currency::{Currency, CurrencyResponse, SymbolPosition};
 use crate::models::pagination::CursorParams;
@@ -1194,12 +1194,7 @@ LIMIT $3
             .collect())
     }
 
-    pub async fn get_account_context(
-        &self,
-        account_id: &Uuid,
-        period_id: &Uuid,
-        user_id: &Uuid,
-    ) -> Result<AccountContextResponse, AppError> {
+    pub async fn get_account_context(&self, account_id: &Uuid, period_id: &Uuid, user_id: &Uuid) -> Result<AccountContextResponse, AppError> {
         // --- Category impact: outflows in current period, grouped by category ---
         #[derive(sqlx::FromRow)]
         struct CategoryRow {
@@ -1238,7 +1233,11 @@ ORDER BY amount DESC
             .into_iter()
             .map(|r| {
                 let pct = if total_outflows > 0 { (r.amount * 100 / total_outflows) as i32 } else { 0 };
-                CategoryImpactItem { category_name: r.category_name, amount: r.amount, percentage: pct }
+                CategoryImpactItem {
+                    category_name: r.category_name,
+                    amount: r.amount,
+                    percentage: pct,
+                }
             })
             .collect();
 
@@ -1300,7 +1299,11 @@ CROSS JOIN base
         let periods_evaluated = stability_rows.len() as i64;
         let periods_closed_positive = stability_rows.iter().filter(|r| r.is_positive).count() as i64;
         let balances: Vec<i64> = stability_rows.iter().map(|r| r.closing_balance).collect();
-        let avg = if periods_evaluated > 0 { balances.iter().sum::<i64>() / periods_evaluated } else { 0 };
+        let avg = if periods_evaluated > 0 {
+            balances.iter().sum::<i64>() / periods_evaluated
+        } else {
+            0
+        };
         let highest = balances.iter().copied().max().unwrap_or(0);
         let lowest = balances.iter().copied().min().unwrap_or(0);
 
@@ -1337,8 +1340,7 @@ LIMIT 1
         .fetch_optional(&self.pool)
         .await?;
 
-        let (largest_outflow, largest_outflow_cat) =
-            largest.map(|r| (r.amount, r.category_name)).unwrap_or((0, String::new()));
+        let (largest_outflow, largest_outflow_cat) = largest.map(|r| (r.amount, r.category_name)).unwrap_or((0, String::new()));
 
         Ok(AccountContextResponse {
             category_impact,
