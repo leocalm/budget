@@ -3,8 +3,8 @@ use crate::database::postgres_repository::PostgresRepository;
 use crate::error::app_error::AppError;
 use crate::middleware::rate_limit::RateLimit;
 use crate::models::account::{
-    AccountListResponse, AccountManagementResponse, AccountOptionResponse, AccountRequest, AccountResponse, AccountUpdateRequest, AccountsSummaryResponse,
-    AdjustStartingBalanceRequest,
+    AccountDetailResponse, AccountListResponse, AccountManagementResponse, AccountOptionResponse, AccountRequest, AccountResponse, AccountUpdateRequest,
+    AccountsSummaryResponse, AdjustStartingBalanceRequest,
 };
 use crate::models::pagination::{CursorPaginatedResponse, CursorParams};
 use crate::service::account::AccountService;
@@ -173,6 +173,23 @@ pub async fn get_account_options(
     Ok(Json(responses))
 }
 
+/// Get account detail metrics for a budget period
+#[openapi(tag = "Accounts")]
+#[get("/<id>/detail?<period_id>")]
+pub async fn get_account_detail(
+    pool: &State<PgPool>,
+    _rate_limit: RateLimit,
+    current_user: CurrentUser,
+    id: &str,
+    period_id: String,
+) -> Result<Json<AccountDetailResponse>, AppError> {
+    let repo = PostgresRepository { pool: pool.inner().clone() };
+    let account_uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid account id", e))?;
+    let period_uuid = Uuid::parse_str(&period_id).map_err(|e| AppError::uuid("Invalid period id", e))?;
+    let detail = repo.get_account_detail(&account_uuid, &period_uuid, &current_user.id).await?;
+    Ok(Json(detail))
+}
+
 pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
     rocket_okapi::openapi_get_routes_spec![
         create_account,
@@ -185,7 +202,8 @@ pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
         restore_account,
         adjust_starting_balance,
         get_accounts_summary,
-        get_account_options
+        get_account_options,
+        get_account_detail
     ]
 }
 
@@ -682,5 +700,41 @@ mod tests {
 
         let body = delete_response.into_string().await.expect("error body");
         assert!(body.contains("Cannot delete account with existing transactions"));
+    }
+
+    #[rocket::async_test]
+    #[ignore = "requires database"]
+    async fn test_get_account_detail() {
+        let mut config = Config::default();
+        config.database.url = "postgres://postgres:example@127.0.0.1:5432/piggy_pulse_db".to_string();
+        config.rate_limit.require_client_ip = false;
+        config.session.cookie_secure = false;
+
+        let client = Client::tracked(build_rocket(config)).await.expect("valid rocket instance");
+        create_user_and_auth(&client).await;
+
+        let category_id = create_category(&client, "Salary", "Incoming").await;
+        let expense_id = create_category(&client, "Rent", "Outgoing").await;
+        let account_id = create_account(&client, "Test Checking", 100_000).await;
+
+        let today = Utc::now().date_naive();
+        let start = today.checked_sub_signed(Duration::days(5)).unwrap_or(today);
+        let period_id = create_budget_period(&client, start, today).await;
+
+        create_transaction(&client, &category_id, &account_id, start, 50_000).await;
+        create_transaction(&client, &expense_id, &account_id, start, 20_000).await;
+
+        let response = client
+            .get(format!("/api/v1/accounts/{}/detail?period_id={}", account_id, period_id))
+            .dispatch()
+            .await;
+        assert_eq!(response.status(), Status::Ok);
+
+        let body = response.into_string().await.expect("response body");
+        let json: Value = serde_json::from_str(&body).expect("valid json");
+
+        assert_eq!(json["inflows"].as_i64().unwrap(), 50_000);
+        assert_eq!(json["outflows"].as_i64().unwrap(), 20_000);
+        assert_eq!(json["net"].as_i64().unwrap(), 30_000);
     }
 }

@@ -1,8 +1,9 @@
 use crate::database::postgres_repository::{PostgresRepository, is_unique_violation};
 use crate::error::app_error::AppError;
-use crate::models::account::{Account, AccountBalancePerDay, AccountManagementResponse, AccountRequest, AccountType, AccountUpdateRequest, AccountWithMetrics};
+use crate::models::account::{Account, AccountBalancePerDay, AccountDetailResponse, AccountManagementResponse, AccountRequest, AccountType, AccountUpdateRequest, AccountWithMetrics};
 use crate::models::currency::{Currency, CurrencyResponse, SymbolPosition};
 use crate::models::pagination::CursorParams;
+use chrono::NaiveDate;
 use uuid::Uuid;
 
 // Intermediate struct for sqlx query results with JOINed currency data
@@ -893,6 +894,88 @@ ORDER BY a.id, d.day
             spend_limit: row.spend_limit,
             is_archived: row.is_archived,
             next_transfer_amount: row.next_transfer_amount,
+        })
+    }
+
+    pub async fn get_account_detail(
+        &self,
+        account_id: &Uuid,
+        period_id: &Uuid,
+        user_id: &Uuid,
+    ) -> Result<AccountDetailResponse, AppError> {
+        #[derive(sqlx::FromRow)]
+        struct DetailRow {
+            balance: i64,
+            inflows: i64,
+            outflows: i64,
+            period_start: NaiveDate,
+            period_end: NaiveDate,
+        }
+
+        let row = sqlx::query_as::<_, DetailRow>(
+            r#"
+WITH period AS (
+    SELECT start_date, end_date
+    FROM budget_period
+    WHERE id = $2 AND user_id = $3
+),
+period_txs AS (
+    SELECT
+        t.amount,
+        c.category_type,
+        t.from_account_id,
+        t.to_account_id
+    FROM transaction t
+    JOIN category c ON c.id = t.category_id
+    CROSS JOIN period
+    WHERE t.user_id = $3
+      AND (t.from_account_id = $1 OR t.to_account_id = $1)
+      AND t.occurred_at >= period.start_date
+      AND t.occurred_at <= period.end_date
+),
+flow AS (
+    SELECT
+        COALESCE(SUM(CASE
+            WHEN category_type = 'Incoming' THEN amount
+            WHEN category_type = 'Transfer' AND to_account_id = $1 THEN amount
+            ELSE 0
+        END), 0) AS inflows,
+        COALESCE(SUM(CASE
+            WHEN category_type = 'Outgoing' THEN amount
+            WHEN category_type = 'Transfer' AND from_account_id = $1 THEN amount
+            ELSE 0
+        END), 0) AS outflows
+    FROM period_txs
+)
+SELECT
+    a.balance                         AS balance,
+    flow.inflows::bigint              AS inflows,
+    flow.outflows::bigint             AS outflows,
+    period.start_date                 AS period_start,
+    period.end_date                   AS period_end
+FROM account a
+CROSS JOIN flow
+CROSS JOIN period
+WHERE a.id = $1 AND a.user_id = $3
+            "#,
+        )
+        .bind(account_id)
+        .bind(period_id)
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Account not found".to_string()))?;
+
+        let net = row.inflows - row.outflows;
+        let balance_change = net;
+        Ok(AccountDetailResponse {
+            balance: row.balance,
+            balance_change,
+            inflows: row.inflows,
+            outflows: row.outflows,
+            net,
+            period_start: row.period_start,
+            period_end: row.period_end,
         })
     }
 }
