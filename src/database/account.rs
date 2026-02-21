@@ -1,8 +1,8 @@
 use crate::database::postgres_repository::{PostgresRepository, is_unique_violation};
 use crate::error::app_error::AppError;
 use crate::models::account::{
-    Account, AccountBalanceHistoryPoint, AccountBalancePerDay, AccountDetailResponse, AccountManagementResponse, AccountRequest, AccountTransactionResponse,
-    AccountType, AccountUpdateRequest, AccountWithMetrics,
+    Account, AccountBalanceHistoryPoint, AccountBalancePerDay, AccountContextResponse, AccountDetailResponse, AccountManagementResponse, AccountRequest,
+    AccountStability, AccountTransactionResponse, AccountType, AccountUpdateRequest, AccountWithMetrics, CategoryImpactItem,
 };
 use crate::models::currency::{Currency, CurrencyResponse, SymbolPosition};
 use crate::models::pagination::CursorParams;
@@ -1192,6 +1192,168 @@ LIMIT $3
                 running_balance: r.running_balance,
             })
             .collect())
+    }
+
+    pub async fn get_account_context(&self, account_id: &Uuid, period_id: &Uuid, user_id: &Uuid) -> Result<AccountContextResponse, AppError> {
+        // --- Category impact: outflows in current period, grouped by category ---
+        #[derive(sqlx::FromRow)]
+        struct CategoryRow {
+            category_name: String,
+            amount: i64,
+        }
+
+        let cat_rows = sqlx::query_as::<_, CategoryRow>(
+            r#"
+WITH period AS (
+    SELECT start_date, end_date FROM budget_period WHERE id = $2 AND user_id = $3
+)
+SELECT
+    cat.name AS category_name,
+    SUM(t.amount)::bigint AS amount
+FROM transaction t
+JOIN category cat ON cat.id = t.category_id
+CROSS JOIN period
+WHERE t.from_account_id = $1
+  AND t.user_id = $3
+  AND cat.category_type = 'Outgoing'
+  AND t.occurred_at >= period.start_date
+  AND t.occurred_at <= period.end_date
+GROUP BY cat.name
+ORDER BY amount DESC
+            "#,
+        )
+        .bind(account_id)
+        .bind(period_id)
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let total_outflows: i64 = cat_rows.iter().map(|r| r.amount).sum();
+        let category_impact = cat_rows
+            .into_iter()
+            .map(|r| {
+                let pct = if total_outflows > 0 { (r.amount * 100 / total_outflows) as i32 } else { 0 };
+                CategoryImpactItem {
+                    category_name: r.category_name,
+                    amount: r.amount,
+                    percentage: pct,
+                }
+            })
+            .collect();
+
+        // --- Stability: look at up to 6 prior closed periods ---
+        #[derive(sqlx::FromRow)]
+        struct StabilityRow {
+            closing_balance: i64,
+            is_positive: bool,
+        }
+
+        let stability_rows = sqlx::query_as::<_, StabilityRow>(
+            r#"
+WITH prior_periods AS (
+    SELECT id, start_date, end_date
+    FROM budget_period
+    WHERE user_id = $2
+      AND end_date < CURRENT_DATE
+      AND id != $3
+    ORDER BY end_date DESC
+    LIMIT 6
+),
+period_flows AS (
+    SELECT
+        pp.id AS period_id,
+        pp.end_date,
+        COALESCE(SUM(
+            CASE
+                WHEN c.category_type = 'Incoming'                              THEN  t.amount::bigint
+                WHEN c.category_type = 'Outgoing'                              THEN -t.amount::bigint
+                WHEN c.category_type = 'Transfer' AND t.from_account_id = $1  THEN -t.amount::bigint
+                WHEN c.category_type = 'Transfer' AND t.to_account_id   = $1  THEN  t.amount::bigint
+                ELSE 0
+            END
+        ), 0) AS net_flow
+    FROM prior_periods pp
+    LEFT JOIN transaction t ON (t.from_account_id = $1 OR t.to_account_id = $1)
+                            AND t.user_id = $2
+                            AND t.occurred_at >= pp.start_date
+                            AND t.occurred_at <= pp.end_date
+    LEFT JOIN category c ON c.id = t.category_id
+    GROUP BY pp.id, pp.end_date
+),
+base AS (
+    SELECT a.balance AS current_balance FROM account a WHERE a.id = $1 AND a.user_id = $2
+)
+SELECT
+    (base.current_balance + SUM(pf.net_flow) OVER (ORDER BY pf.end_date DESC ROWS UNBOUNDED PRECEDING))::bigint AS closing_balance,
+    ((base.current_balance + SUM(pf.net_flow) OVER (ORDER BY pf.end_date DESC ROWS UNBOUNDED PRECEDING)) > 0) AS is_positive
+FROM period_flows pf
+CROSS JOIN base
+            "#,
+        )
+        .bind(account_id)
+        .bind(user_id)
+        .bind(period_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let periods_evaluated = stability_rows.len() as i64;
+        let periods_closed_positive = stability_rows.iter().filter(|r| r.is_positive).count() as i64;
+        let balances: Vec<i64> = stability_rows.iter().map(|r| r.closing_balance).collect();
+        let avg = if periods_evaluated > 0 {
+            balances.iter().sum::<i64>() / periods_evaluated
+        } else {
+            0
+        };
+        let highest = balances.iter().copied().max().unwrap_or(0);
+        let lowest = balances.iter().copied().min().unwrap_or(0);
+
+        // Largest single outflow in current period
+        #[derive(sqlx::FromRow)]
+        struct OutflowRow {
+            category_name: String,
+            amount: i64,
+        }
+
+        let largest = sqlx::query_as::<_, OutflowRow>(
+            r#"
+WITH period AS (
+    SELECT start_date, end_date FROM budget_period WHERE id = $2 AND user_id = $3
+)
+SELECT
+    cat.name AS category_name,
+    t.amount::bigint AS amount
+FROM transaction t
+JOIN category cat ON cat.id = t.category_id
+CROSS JOIN period
+WHERE t.from_account_id = $1
+  AND t.user_id = $3
+  AND cat.category_type = 'Outgoing'
+  AND t.occurred_at >= period.start_date
+  AND t.occurred_at <= period.end_date
+ORDER BY t.amount DESC
+LIMIT 1
+            "#,
+        )
+        .bind(account_id)
+        .bind(period_id)
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let (largest_outflow, largest_outflow_cat) = largest.map(|r| (r.amount, r.category_name)).unwrap_or((0, String::new()));
+
+        Ok(AccountContextResponse {
+            category_impact,
+            stability: AccountStability {
+                periods_closed_positive,
+                periods_evaluated,
+                avg_closing_balance: avg,
+                highest_closing_balance: highest,
+                lowest_closing_balance: lowest,
+                largest_single_outflow: largest_outflow,
+                largest_single_outflow_category: largest_outflow_cat,
+            },
+        })
     }
 }
 

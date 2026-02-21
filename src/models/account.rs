@@ -194,3 +194,27 @@ pub struct AccountTransactionResponse {
     pub flow: String,         // "in" | "out"
     pub running_balance: i64, // cents, server-computed
 }
+
+#[derive(Serialize, Debug, JsonSchema)]
+pub struct CategoryImpactItem {
+    pub category_name: String,
+    pub amount: i64,
+    pub percentage: i32,
+}
+
+#[derive(Serialize, Debug, JsonSchema)]
+pub struct AccountStability {
+    pub periods_closed_positive: i64,
+    pub periods_evaluated: i64,
+    pub avg_closing_balance: i64,
+    pub highest_closing_balance: i64,
+    pub lowest_closing_balance: i64,
+    pub largest_single_outflow: i64,
+    pub largest_single_outflow_category: String,
+}
+
+#[derive(Serialize, Debug, JsonSchema)]
+pub struct AccountContextResponse {
+    pub category_impact: Vec<CategoryImpactItem>,
+    pub stability: AccountStability,
+}
