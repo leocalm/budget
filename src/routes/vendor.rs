@@ -7,7 +7,7 @@ use crate::models::pagination::{CursorPaginatedResponse, CursorParams};
 use crate::models::vendor::{VendorRequest, VendorResponse, VendorWithPeriodStatsResponse, VendorWithStatsResponse};
 use rocket::http::Status;
 use rocket::serde::json::Json;
-use rocket::{State, delete, get, post, put};
+use rocket::{State, delete, get, patch, post, put};
 use rocket_okapi::openapi;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -106,21 +106,43 @@ pub async fn put_vendor(
 
 /// Get vendors with transaction statistics, ordered by specified field
 #[openapi(tag = "Vendors")]
-#[get("/with_status?<order_by>")]
+#[get("/with_status?<order_by>&<archived>")]
 pub async fn get_vendors_with_status(
     pool: &State<PgPool>,
     _rate_limit: RateLimit,
     current_user: CurrentUser,
     order_by: VendorOrderBy,
+    archived: Option<bool>,
 ) -> Result<Json<Vec<VendorWithStatsResponse>>, AppError> {
     let repo = PostgresRepository { pool: pool.inner().clone() };
+    let show_archived = archived.unwrap_or(false);
     Ok(Json(
-        repo.list_vendors_with_status(order_by, &current_user.id)
+        repo.list_vendors_with_status(order_by, show_archived, &current_user.id)
             .await?
             .iter()
             .map(VendorWithStatsResponse::from)
             .collect(),
     ))
+}
+
+/// Archive a vendor by ID
+#[openapi(tag = "Vendors")]
+#[patch("/<id>/archive")]
+pub async fn archive_vendor(pool: &State<PgPool>, _rate_limit: RateLimit, current_user: CurrentUser, id: &str) -> Result<Json<VendorResponse>, AppError> {
+    let repo = PostgresRepository { pool: pool.inner().clone() };
+    let uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid vendor id", e))?;
+    let vendor = repo.archive_vendor(&uuid, &current_user.id).await?;
+    Ok(Json(VendorResponse::from(&vendor)))
+}
+
+/// Restore an archived vendor by ID
+#[openapi(tag = "Vendors")]
+#[patch("/<id>/restore")]
+pub async fn restore_vendor(pool: &State<PgPool>, _rate_limit: RateLimit, current_user: CurrentUser, id: &str) -> Result<Json<VendorResponse>, AppError> {
+    let repo = PostgresRepository { pool: pool.inner().clone() };
+    let uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid vendor id", e))?;
+    let vendor = repo.restore_vendor(&uuid, &current_user.id).await?;
+    Ok(Json(VendorResponse::from(&vendor)))
 }
 
 pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
@@ -131,7 +153,9 @@ pub fn routes() -> (Vec<rocket::Route>, okapi::openapi3::OpenApi) {
         get_vendor,
         delete_vendor,
         put_vendor,
-        get_vendors_with_status
+        get_vendors_with_status,
+        archive_vendor,
+        restore_vendor
     ];
     (routes, spec)
 }

@@ -112,6 +112,8 @@ pub fn sample_transaction() -> Transaction {
         vendor: Some(Vendor {
             id: Uuid::new_v4(),
             name: "Vendor".into(),
+            description: None,
+            archived: false,
         }),
     }
 }
