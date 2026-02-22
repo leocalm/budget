@@ -208,12 +208,21 @@ LIMIT $4
             order_by_clause
         );
 
-        let rows = sqlx::query_as::<_, VendorWithStatsRow>(&query).bind(user_id).bind(archived).fetch_all(&self.pool).await?;
+        let rows = sqlx::query_as::<_, VendorWithStatsRow>(&query)
+            .bind(user_id)
+            .bind(archived)
+            .fetch_all(&self.pool)
+            .await?;
 
         Ok(rows
             .into_iter()
             .map(|r| VendorWithStats {
-                vendor: Vendor { id: r.id, name: r.name, description: r.description, archived: r.archived },
+                vendor: Vendor {
+                    id: r.id,
+                    name: r.name,
+                    description: r.description,
+                    archived: r.archived,
+                },
                 stats: VendorStats {
                     transaction_count: r.transaction_count,
                     last_used_at: r.last_used_at,

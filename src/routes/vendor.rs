@@ -128,12 +128,7 @@ pub async fn get_vendors_with_status(
 /// Archive a vendor by ID
 #[openapi(tag = "Vendors")]
 #[patch("/<id>/archive")]
-pub async fn archive_vendor(
-    pool: &State<PgPool>,
-    _rate_limit: RateLimit,
-    current_user: CurrentUser,
-    id: &str,
-) -> Result<Json<VendorResponse>, AppError> {
+pub async fn archive_vendor(pool: &State<PgPool>, _rate_limit: RateLimit, current_user: CurrentUser, id: &str) -> Result<Json<VendorResponse>, AppError> {
     let repo = PostgresRepository { pool: pool.inner().clone() };
     let uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid vendor id", e))?;
     let vendor = repo.archive_vendor(&uuid, &current_user.id).await?;
@@ -143,12 +138,7 @@ pub async fn archive_vendor(
 /// Restore an archived vendor by ID
 #[openapi(tag = "Vendors")]
 #[patch("/<id>/restore")]
-pub async fn restore_vendor(
-    pool: &State<PgPool>,
-    _rate_limit: RateLimit,
-    current_user: CurrentUser,
-    id: &str,
-) -> Result<Json<VendorResponse>, AppError> {
+pub async fn restore_vendor(pool: &State<PgPool>, _rate_limit: RateLimit, current_user: CurrentUser, id: &str) -> Result<Json<VendorResponse>, AppError> {
     let repo = PostgresRepository { pool: pool.inner().clone() };
     let uuid = Uuid::parse_str(id).map_err(|e| AppError::uuid("Invalid vendor id", e))?;
     let vendor = repo.restore_vendor(&uuid, &current_user.id).await?;
