@@ -97,7 +97,9 @@ pub async fn get_recent_transactions(
     repo.get_budget_period(&budget_period_uuid, &current_user.id).await?;
     let params = CursorParams { cursor: None, limit: Some(10) };
     let filters = TransactionFilters::default();
-    let transactions = repo.get_transactions_for_period(&budget_period_uuid, &params, &filters, &current_user.id).await?;
+    let transactions = repo
+        .get_transactions_for_period(&budget_period_uuid, &params, &filters, &current_user.id)
+        .await?;
     Ok(Json(transactions.iter().take(10).map(TransactionResponse::from).collect()))
 }
 

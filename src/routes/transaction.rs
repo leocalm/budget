@@ -55,22 +55,25 @@ pub async fn list_all_transactions(
 
     // Parse filter query params
     let filters = {
-        let account_ids = account_id.iter()
+        let account_ids = account_id
+            .iter()
             .map(|s| Uuid::parse_str(s).map_err(|e| AppError::uuid("Invalid account_id", e)))
             .collect::<Result<Vec<_>, _>>()?;
-        let category_ids = category_id.iter()
+        let category_ids = category_id
+            .iter()
             .map(|s| Uuid::parse_str(s).map_err(|e| AppError::uuid("Invalid category_id", e)))
             .collect::<Result<Vec<_>, _>>()?;
-        let vendor_ids = vendor_id.iter()
+        let vendor_ids = vendor_id
+            .iter()
             .map(|s| Uuid::parse_str(s).map_err(|e| AppError::uuid("Invalid vendor_id", e)))
             .collect::<Result<Vec<_>, _>>()?;
-        let date_from = date_from.as_deref()
-            .map(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d")
-                .map_err(|_| AppError::BadRequest("Invalid date_from format, expected YYYY-MM-DD".to_string())))
+        let date_from = date_from
+            .as_deref()
+            .map(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").map_err(|_| AppError::BadRequest("Invalid date_from format, expected YYYY-MM-DD".to_string())))
             .transpose()?;
-        let date_to = date_to.as_deref()
-            .map(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d")
-                .map_err(|_| AppError::BadRequest("Invalid date_to format, expected YYYY-MM-DD".to_string())))
+        let date_to = date_to
+            .as_deref()
+            .map(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").map_err(|_| AppError::BadRequest("Invalid date_to format, expected YYYY-MM-DD".to_string())))
             .transpose()?;
         TransactionFilters {
             account_ids,

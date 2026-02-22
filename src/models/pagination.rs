@@ -74,7 +74,7 @@ impl<T> CursorPaginatedResponse<T> {
 pub struct TransactionFilters {
     pub account_ids: Vec<Uuid>,
     pub category_ids: Vec<Uuid>,
-    pub direction: Option<String>,   // "Incoming" | "Outgoing" | "Transfer"
+    pub direction: Option<String>, // "Incoming" | "Outgoing" | "Transfer"
     pub vendor_ids: Vec<Uuid>,
     pub date_from: Option<NaiveDate>,
     pub date_to: Option<NaiveDate>,

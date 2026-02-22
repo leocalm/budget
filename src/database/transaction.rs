@@ -199,11 +199,7 @@ const TRANSACTION_JOINS: &str = r#"
 fn build_transaction_query(from_clause: &str, base_where: &str, extra_where: &str, order_by: &str) -> String {
     let mut query = format!("SELECT {} FROM {} {}", TRANSACTION_SELECT_FIELDS, from_clause, TRANSACTION_JOINS);
 
-    let clauses: Vec<&str> = [base_where, extra_where]
-        .iter()
-        .filter(|s| !s.is_empty())
-        .copied()
-        .collect();
+    let clauses: Vec<&str> = [base_where, extra_where].iter().filter(|s| !s.is_empty()).copied().collect();
 
     if !clauses.is_empty() {
         query.push_str("WHERE ");
@@ -390,9 +386,7 @@ impl PostgresRepository {
             );
             let limit_n = 3 + filter_binds.len();
             let full_query = format!("{} LIMIT ${}", base, limit_n);
-            let mut q = sqlx::query_as::<_, TransactionRow>(&full_query)
-                .bind(user_id)
-                .bind(cursor);
+            let mut q = sqlx::query_as::<_, TransactionRow>(&full_query).bind(user_id).bind(cursor);
             for bind in &filter_binds {
                 q = bind_filter_value(q, bind);
             }
@@ -403,7 +397,7 @@ impl PostgresRepository {
                 "transaction t",
                 "t.user_id = $1",
                 &filter_sql,
-                "t.occurred_at DESC, t.created_at DESC, t.id DESC"
+                "t.occurred_at DESC, t.created_at DESC, t.id DESC",
             );
             let limit_n = 2 + filter_binds.len();
             let full_query = format!("{} LIMIT ${}", base, limit_n);
@@ -417,7 +411,13 @@ impl PostgresRepository {
         Ok(rows.into_iter().map(Transaction::from).collect())
     }
 
-    pub async fn get_transactions_for_period(&self, period_id: &Uuid, params: &CursorParams, filters: &TransactionFilters, user_id: &Uuid) -> Result<Vec<Transaction>, AppError> {
+    pub async fn get_transactions_for_period(
+        &self,
+        period_id: &Uuid,
+        params: &CursorParams,
+        filters: &TransactionFilters,
+        user_id: &Uuid,
+    ) -> Result<Vec<Transaction>, AppError> {
         let rows = if let Some(cursor) = params.cursor {
             let (filter_sql, filter_binds) = build_filter_clause(filters, 4); // $1=period_id, $2=user_id, $3=cursor
             let base_where = "bp.id = $1 \
@@ -436,12 +436,12 @@ impl PostgresRepository {
                  WHERE {} \
                  ORDER BY t.occurred_at DESC, t.created_at DESC, t.id DESC \
                  LIMIT ${}",
-                TRANSACTION_SELECT_FIELDS, TRANSACTION_JOINS, combined_where, 4 + filter_binds.len()
+                TRANSACTION_SELECT_FIELDS,
+                TRANSACTION_JOINS,
+                combined_where,
+                4 + filter_binds.len()
             );
-            let mut q = sqlx::query_as::<_, TransactionRow>(&query)
-                .bind(period_id)
-                .bind(user_id)
-                .bind(cursor);
+            let mut q = sqlx::query_as::<_, TransactionRow>(&query).bind(period_id).bind(user_id).bind(cursor);
             for bind in &filter_binds {
                 q = bind_filter_value(q, bind);
             }
@@ -463,11 +463,12 @@ impl PostgresRepository {
                  WHERE {} \
                  ORDER BY t.occurred_at DESC, t.created_at DESC, t.id DESC \
                  LIMIT ${}",
-                TRANSACTION_SELECT_FIELDS, TRANSACTION_JOINS, combined_where, 3 + filter_binds.len()
+                TRANSACTION_SELECT_FIELDS,
+                TRANSACTION_JOINS,
+                combined_where,
+                3 + filter_binds.len()
             );
-            let mut q = sqlx::query_as::<_, TransactionRow>(&query)
-                .bind(period_id)
-                .bind(user_id);
+            let mut q = sqlx::query_as::<_, TransactionRow>(&query).bind(period_id).bind(user_id);
             for bind in &filter_binds {
                 q = bind_filter_value(q, bind);
             }
