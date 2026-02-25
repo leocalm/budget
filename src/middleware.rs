@@ -61,20 +61,13 @@ impl Fairing for RequestLogger {
         let request_id = RequestId::new();
         let method = request.method().to_string();
         let uri = request.uri().to_string();
-        let request_bytes = request
-            .headers()
-            .get_one("Content-Length")
-            .and_then(|v| v.parse::<u64>().ok())
-            .unwrap_or(0);
+        let request_bytes = request.headers().get_one("Content-Length").and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
 
         // Extract user_id from cookie without DB hit
-        let user_id = request
-            .cookies()
-            .get_private("user")
-            .and_then(|c| {
-                let value = c.value().to_string();
-                crate::auth::parse_session_cookie_value(&value).map(|(_, uid)| uid.to_string())
-            });
+        let user_id = request.cookies().get_private("user").and_then(|c| {
+            let value = c.value().to_string();
+            crate::auth::parse_session_cookie_value(&value).map(|(_, uid)| uid.to_string())
+        });
 
         // Store start time, request_id, and request_bytes in local cache
         request.local_cache(|| RequestStartTime(Instant::now()));
@@ -98,11 +91,7 @@ impl Fairing for RequestLogger {
             .map(|r| r.0.clone())
             .unwrap_or_else(|| "unknown".to_string());
 
-        let duration_ms = request
-            .local_cache(|| RequestStartTime(Instant::now()))
-            .0
-            .elapsed()
-            .as_millis() as u64;
+        let duration_ms = request.local_cache(|| RequestStartTime(Instant::now())).0.elapsed().as_millis() as u64;
 
         let request_bytes = *request.local_cache(|| 0u64);
 
@@ -118,10 +107,7 @@ impl Fairing for RequestLogger {
             .unwrap_or(0);
 
         // Get user_id from CurrentUser cached by auth guard
-        let user_id = request
-            .local_cache(|| None::<crate::auth::CurrentUser>)
-            .as_ref()
-            .map(|u| u.id.to_string());
+        let user_id = request.local_cache(|| None::<crate::auth::CurrentUser>).as_ref().map(|u| u.id.to_string());
 
         // Add request_id to response headers for client tracking
         response.set_header(Header::new("X-Request-Id", request_id.clone()));

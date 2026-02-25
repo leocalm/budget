@@ -10,7 +10,6 @@ use crate::models::two_factor::{
     TwoFactorVerifyRequest,
 };
 use rocket::http::Status;
-use serde_json::json;
 use rocket::serde::json::Json;
 use rocket::{State, delete, get, post};
 use rocket_okapi::openapi;

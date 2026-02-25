@@ -1,4 +1,5 @@
 /// Event types for security audit log
+#[allow(dead_code)]
 pub mod audit_events {
     // Authentication events
     pub const LOGIN_SUCCESS: &str = "login_success";

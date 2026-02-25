@@ -7,11 +7,11 @@ use crate::middleware::{ClientIp, UserAgent};
 use crate::models::audit::audit_events;
 use crate::models::user::{LoginRequest, UserRequest, UserResponse};
 use rocket::http::{Cookie, CookieJar, SameSite, Status};
-use serde_json::json;
 use rocket::serde::json::Json;
 use rocket::time::Duration;
 use rocket::{State, delete, get, post, put};
 use rocket_okapi::openapi;
+use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
 use validator::Validate;
@@ -273,27 +273,14 @@ pub async fn post_user_login(
 /// Log out the current user
 #[openapi(tag = "Users")]
 #[post("/logout")]
-pub async fn post_user_logout(
-    pool: &State<PgPool>,
-    _rate_limit: RateLimit,
-    cookies: &CookieJar<'_>,
-    user_agent: UserAgent,
-    client_ip: ClientIp,
-) -> Status {
+pub async fn post_user_logout(pool: &State<PgPool>, _rate_limit: RateLimit, cookies: &CookieJar<'_>, user_agent: UserAgent, client_ip: ClientIp) -> Status {
     if let Some(cookie) = cookies.get_private("user")
         && let Some((session_id, user_id)) = parse_session_cookie_value(cookie.value())
     {
         let repo = PostgresRepository { pool: pool.inner().clone() };
         let _ = repo.delete_session(&session_id).await;
         let _ = repo
-            .create_security_audit_log(
-                Some(&user_id),
-                audit_events::LOGOUT,
-                true,
-                client_ip.0.clone(),
-                user_agent.0.clone(),
-                None,
-            )
+            .create_security_audit_log(Some(&user_id), audit_events::LOGOUT, true, client_ip.0.clone(), user_agent.0.clone(), None)
             .await;
     }
     cookies.remove_private(Cookie::build("user").build());
