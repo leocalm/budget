@@ -37,7 +37,11 @@ fn init_tracing(log_level: &str, json_format: bool) {
     //   RUST_LOG=info,piggy_pulse::routes=debug - Global info, routes at debug
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level));
 
-    let subscriber = tracing_subscriber::fmt().with_env_filter(filter).with_target(true).with_line_number(true);
+    let subscriber = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(true)
+        .with_line_number(true)
+        .with_thread_ids(false);
 
     if json_format {
         subscriber.json().init();
