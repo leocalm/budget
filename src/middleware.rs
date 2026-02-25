@@ -137,7 +137,7 @@ impl Fairing for RequestLogger {
                 request_bytes = request_bytes,
                 response_bytes = response_bytes,
                 user_id = user_id.as_deref().unwrap_or("-"),
-                slow = is_slow,
+                slow = if is_slow { Some(true) } else { None },
                 "request completed{}{}",
                 if is_error { " with error" } else { "" },
                 if is_slow { " (slow)" } else { "" },
