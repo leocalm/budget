@@ -243,7 +243,7 @@ fn build_filter_clause(filters: &TransactionFilters, start_offset: usize) -> (St
     }
     if let Some(ref dir) = filters.direction {
         parts.push(format!("c.category_type::text = ${}", n));
-        binds.push(FilterBindValue::Text(dir.clone()));
+        binds.push(FilterBindValue::Text(dir.as_str().to_string()));
         n += 1;
     }
     if !filters.vendor_ids.is_empty() {

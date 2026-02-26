@@ -93,6 +93,18 @@ impl PostgresRepository {
         Ok(sessions)
     }
 
+    /// Deletes all sessions for a user except the one specified by `keep_session_id`.
+    /// Used after a password change to invalidate all other active sessions.
+    pub async fn delete_other_sessions_for_user(&self, user_id: &Uuid, keep_session_id: &Uuid) -> Result<(), AppError> {
+        sqlx::query("DELETE FROM user_session WHERE user_id = $1 AND id != $2")
+            .bind(user_id)
+            .bind(keep_session_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
+    }
+
     /// Deletes a session only if it belongs to the given user.
     /// Returns `NotFound` if the session does not exist or belongs to a different user.
     pub async fn delete_session_for_user(&self, session_id: &Uuid, user_id: &Uuid) -> Result<(), AppError> {
