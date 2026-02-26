@@ -9,6 +9,7 @@ pub mod dashboard;
 pub mod overlay;
 pub mod pagination;
 pub mod password_reset;
+pub mod rate_limit;
 pub mod session;
 pub mod settings;
 pub mod transaction;
