@@ -165,6 +165,7 @@ pub struct SessionInfoResponse {
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub user_agent: Option<String>,
+    pub ip_address: Option<String>,
 }
 
 // ── Period model ──────────────────────────────────────────────────────────────
@@ -295,14 +296,32 @@ pub struct PeriodModelRequest {
 
 // ── Danger zone ───────────────────────────────────────────────────────────────
 
-#[derive(Deserialize, Debug, JsonSchema)]
+fn validate_delete_confirmation(s: &str) -> Result<(), ValidationError> {
+    if s == "DELETE" {
+        Ok(())
+    } else {
+        Err(ValidationError::new("confirmation must equal 'DELETE'"))
+    }
+}
+
+fn validate_reset_confirmation(s: &str) -> Result<(), ValidationError> {
+    if s == "RESET" {
+        Ok(())
+    } else {
+        Err(ValidationError::new("confirmation must equal 'RESET'"))
+    }
+}
+
+#[derive(Deserialize, Debug, Validate, JsonSchema)]
 pub struct DeleteAccountRequest {
     /// Must equal "DELETE" to confirm destructive action.
+    #[validate(custom(function = "validate_delete_confirmation"))]
     pub confirmation: String,
 }
 
-#[derive(Deserialize, Debug, JsonSchema)]
+#[derive(Deserialize, Debug, Validate, JsonSchema)]
 pub struct ResetStructureRequest {
     /// Must equal "RESET" to confirm destructive action.
+    #[validate(custom(function = "validate_reset_confirmation"))]
     pub confirmation: String,
 }

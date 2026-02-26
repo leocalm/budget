@@ -138,6 +138,7 @@ pub async fn list_sessions(pool: &State<PgPool>, _rate_limit: RateLimit, current
             created_at: s.created_at,
             expires_at: s.expires_at,
             user_agent: s.user_agent,
+            ip_address: s.ip_address,
         })
         .collect();
     Ok(Json(responses))
@@ -208,9 +209,7 @@ pub async fn post_reset_structure(
     current_user: CurrentUser,
     payload: Json<ResetStructureRequest>,
 ) -> Result<Status, AppError> {
-    if payload.confirmation != "RESET" {
-        return Err(AppError::BadRequest("confirmation must equal 'RESET'".to_string()));
-    }
+    payload.validate()?;
 
     let repo = PostgresRepository { pool: pool.inner().clone() };
     repo.reset_structure(&current_user.id).await?;
@@ -228,9 +227,7 @@ pub async fn post_delete_account(
     cookies: &CookieJar<'_>,
     payload: Json<DeleteAccountRequest>,
 ) -> Result<Status, AppError> {
-    if payload.confirmation != "DELETE" {
-        return Err(AppError::BadRequest("confirmation must equal 'DELETE'".to_string()));
-    }
+    payload.validate()?;
 
     let repo = PostgresRepository { pool: pool.inner().clone() };
     repo.delete_user(&current_user.id).await?;

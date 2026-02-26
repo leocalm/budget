@@ -120,6 +120,16 @@ impl PostgresRepository {
     }
 
     pub async fn update_profile(&self, user_id: &Uuid, request: &ProfileRequest) -> Result<ProfileData, AppError> {
+        if let Some(currency_id) = request.default_currency_id {
+            let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM currency WHERE id = $1)")
+                .bind(currency_id)
+                .fetch_one(&self.pool)
+                .await?;
+            if !exists {
+                return Err(AppError::BadRequest("Currency not found".to_string()));
+            }
+        }
+
         let mut tx = self.pool.begin().await?;
 
         sqlx::query("UPDATE users SET name = $1 WHERE id = $2")
