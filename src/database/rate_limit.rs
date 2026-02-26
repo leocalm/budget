@@ -24,17 +24,19 @@ impl PostgresRepository {
 
             if let Some(limit) = user_limit {
                 if let Some(locked_until) = limit.locked_until
-                    && locked_until > Utc::now() {
-                        return Ok(RateLimitStatus::Locked {
-                            until: locked_until,
-                            can_unlock: true,
-                        });
-                    }
+                    && locked_until > Utc::now()
+                {
+                    return Ok(RateLimitStatus::Locked {
+                        until: locked_until,
+                        can_unlock: true,
+                    });
+                }
 
                 if let Some(next_attempt) = limit.next_attempt_at
-                    && next_attempt > Utc::now() {
-                        return Ok(RateLimitStatus::Delayed { until: next_attempt });
-                    }
+                    && next_attempt > Utc::now()
+                {
+                    return Ok(RateLimitStatus::Delayed { until: next_attempt });
+                }
             }
         }
 
@@ -49,17 +51,19 @@ impl PostgresRepository {
 
         if let Some(limit) = ip_limit {
             if let Some(locked_until) = limit.locked_until
-                && locked_until > Utc::now() {
-                    return Ok(RateLimitStatus::Locked {
-                        until: locked_until,
-                        can_unlock: false, // IP locks require manual clearing
-                    });
-                }
+                && locked_until > Utc::now()
+            {
+                return Ok(RateLimitStatus::Locked {
+                    until: locked_until,
+                    can_unlock: false, // IP locks require manual clearing
+                });
+            }
 
             if let Some(next_attempt) = limit.next_attempt_at
-                && next_attempt > Utc::now() {
-                    return Ok(RateLimitStatus::Delayed { until: next_attempt });
-                }
+                && next_attempt > Utc::now()
+            {
+                return Ok(RateLimitStatus::Delayed { until: next_attempt });
+            }
         }
 
         Ok(RateLimitStatus::Allowed)

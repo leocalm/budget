@@ -142,10 +142,12 @@ pub async fn post_user_login(
         }
         RateLimitStatus::Locked { until, can_unlock } => {
             // Trigger email unlock if enabled and we have a user
-            if can_unlock && config.login_rate_limit.enable_email_unlock
-                && let Some(uid) = user_id.as_ref() {
-                    let _ = repo.create_unlock_token(uid).await;
-                }
+            if can_unlock
+                && config.login_rate_limit.enable_email_unlock
+                && let Some(uid) = user_id.as_ref()
+            {
+                let _ = repo.create_unlock_token(uid).await;
+            }
             return Err(AppError::AccountLocked {
                 locked_until: until,
                 message: "Account temporarily locked due to too many failed attempts. Check your email for unlock instructions.".to_string(),
