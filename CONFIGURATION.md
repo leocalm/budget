@@ -164,6 +164,44 @@ Notes:
 - If `require_client_ip` is enabled and the client IP cannot be determined, requests fail with 400.
 - The default backend is `in_memory` for local development; set `backend = "redis"` in production.
 
+### Login Rate Limiting (Progressive Backoff)
+
+Controls brute-force protection for the login endpoint. After `free_attempts` failed logins, progressive
+delays are imposed; after `lockout_attempts` failures, the account is locked for `lockout_duration_minutes`.
+
+```toml
+[login_rate_limit]
+free_attempts = 3                  # Failures allowed before delays begin
+delay_seconds = [5, 30, 60]        # Delay after attempt free+1, free+2, ... (seconds)
+lockout_attempts = 7               # Failures before full lockout
+lockout_duration_minutes = 60      # Lock duration
+enable_email_unlock = true         # Send unlock email when account is locked
+notify_user_on_lock = true         # Notify user on lock (requires email)
+notify_admin_on_lock = false       # Notify admin on lock
+admin_email = ""                   # Admin email (if notify_admin_on_lock = true)
+high_failure_threshold = 20        # IP attempts before high-failure audit event
+```
+
+Or with environment variables:
+```bash
+PIGGY_PULSE_LOGIN_RATE_LIMIT__FREE_ATTEMPTS=3
+PIGGY_PULSE_LOGIN_RATE_LIMIT__DELAY_SECONDS=[5,30,60]
+PIGGY_PULSE_LOGIN_RATE_LIMIT__LOCKOUT_ATTEMPTS=7
+PIGGY_PULSE_LOGIN_RATE_LIMIT__LOCKOUT_DURATION_MINUTES=60
+PIGGY_PULSE_LOGIN_RATE_LIMIT__ENABLE_EMAIL_UNLOCK=true
+PIGGY_PULSE_LOGIN_RATE_LIMIT__NOTIFY_USER_ON_LOCK=true
+PIGGY_PULSE_LOGIN_RATE_LIMIT__NOTIFY_ADMIN_ON_LOCK=false
+PIGGY_PULSE_LOGIN_RATE_LIMIT__ADMIN_EMAIL=admin@example.com
+PIGGY_PULSE_LOGIN_RATE_LIMIT__HIGH_FAILURE_THRESHOLD=20
+```
+
+Notes:
+- Rate limits are tracked both per-user and per-IP address; the most restrictive applies.
+- IP-based locks cannot be self-unlocked via email; manual DB intervention is required.
+- The unlock email flow requires the `email` configuration section to be properly configured.
+- Set `enable_email_unlock = false` in test/CI environments where email is unavailable.
+- All rate limit records are cleared from `login_rate_limits` on successful login.
+
 ### Session
 
 ```toml
