@@ -135,4 +135,70 @@ impl<'a> AuthService<'a> {
             _ => AppError::InvalidCredentials,
         }
     }
+
+    /// Verifies a 2FA code (TOTP or backup) for the given user.
+    /// Returns `Ok(backup_used)` on success, or an `Err(AppError)` on failure.
+    pub async fn verify_two_factor(
+        &self,
+        user_id: &Uuid,
+        two_factor_data: crate::models::two_factor::TwoFactorAuth,
+        code: &str,
+        client_ip: Option<String>,
+        user_agent: Option<String>,
+    ) -> Result<bool, AppError> {
+        // Check 2FA-specific rate limit
+        if self.repo.check_rate_limit(user_id).await? {
+            return Err(AppError::BadRequest(
+                "Too many failed attempts. Please try again later.".to_string(),
+            ));
+        }
+
+        let encryption_key = self
+            .config
+            .two_factor
+            .parse_encryption_key()
+            .map_err(AppError::BadRequest)?;
+
+        let encrypted_secret = two_factor_data.encrypted_secret.clone();
+        let encryption_nonce = two_factor_data.encryption_nonce.clone();
+        let code_owned = code.to_string();
+
+        let totp_valid = tokio::task::spawn_blocking(move || {
+            let secret = PostgresRepository::decrypt_secret(
+                &encrypted_secret,
+                &encryption_nonce,
+                &encryption_key,
+            )?;
+            PostgresRepository::verify_totp_code(&secret, &code_owned)
+        })
+        .await
+        .map_err(|e| AppError::BadRequest(format!("Task join error: {}", e)))??;
+
+        let backup_valid = if !totp_valid {
+            self.repo.verify_backup_code(user_id, code).await?
+        } else {
+            false
+        };
+
+        if !totp_valid && !backup_valid {
+            self.repo.record_failed_attempt(user_id).await?;
+            let _ = self
+                .repo
+                .create_security_audit_log(
+                    Some(user_id),
+                    audit_events::LOGIN_FAILED,
+                    false,
+                    client_ip,
+                    user_agent,
+                    Some(serde_json::json!({"reason": "invalid_2fa_code"})),
+                )
+                .await;
+            return Err(AppError::BadRequest(
+                "Invalid two-factor authentication code.".to_string(),
+            ));
+        }
+
+        self.repo.reset_rate_limit(user_id).await?;
+        Ok(backup_valid)
+    }
 }
